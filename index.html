@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <!-- スマホの画面幅に合わせて自動スケーリングするメタタグ -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>大学生向けリアル情報ポータル</title>
+  <title>大学生向けリアル情報ポータル｜TUNAGARI</title>
   <meta name="color-scheme" content="light dark">
 
   <!-- 📱 PWA用設定タグ -->
@@ -734,6 +734,14 @@
     const mapUrl = (store) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.address + " " + store.name)}`;
     const TICKET_VALID_DAYS = 30;
 
+    // 🎁 ポイントがもらえるのは、この3つだけ（「気になる」ではもらえません）
+    //   ・「助かった！」は押した人に+1。取り消すと-1（押し直しで増やせない）。自分の投稿・回答には付かない
+    const POINT_RULES = {
+      share: 10,    // 情報を投稿した（質問の投稿は対象外）
+      thanks: 1,    // 「助かった！」を押した（投稿・回答どちらでも）
+      answer: 3     // 質問に回答した
+    };
+
     // お店の写真（読み込めないときはアイコン）
     function StoreThumb({ store, className, iconSize = 28 }) {
       const [bad, setBad] = useState(false);
@@ -1300,8 +1308,7 @@
     // ============================================================
     // 🖼 フィードの見た目（文字だけの一覧にならないように）
     //   ・写真がない投稿は、タイトルを大きく載せた「表紙」を自動で作る
-    //   ・表示は3種類：home（セクション型）／board（2列ボード）／list（従来の一覧）
-    //     URL末尾に ?layout=board などを付けても切り替えられます
+    //   ・フィードは「セクション型（A案）」：質問の横スクロール → お店のチケット → 2列ボード
     // ============================================================
     const CATEGORY_META = {
       "授業・過去問": { icon: "school", short: "授業・過去問" },
@@ -1314,12 +1321,6 @@
       "バイト・研究室": { icon: "work", short: "バイト" }
     };
     const catMeta = (c) => CATEGORY_META[c] || { icon: "article", short: c };
-    const FEED_LAYOUTS = [
-      { value: "home", label: "ホーム", icon: "dashboard" },
-      { value: "board", label: "ボード", icon: "grid_view" },
-      { value: "list", label: "リスト", icon: "view_agenda" }
-    ];
-    const _layoutParam = new URLSearchParams(window.location.search).get("layout");
     const plainTitle = (t) => String(t || "").replace(/^【質問】\s*/, "");
 
     // 文字だけの投稿の表紙（タイトルを主役に。色は3トーンを順番に）
@@ -1638,8 +1639,7 @@
 
     function App() {
       const [currentTab, setCurrentTab] = useState(0);
-      const [feedLayout, setFeedLayout] = usePersistentState("feedLayout", () => (FEED_LAYOUTS.some(l => l.value === _layoutParam) ? _layoutParam : "home"));
-      useEffect(() => { if (FEED_LAYOUTS.some(l => l.value === _layoutParam)) setFeedLayout(_layoutParam); }, []);
+      const feedLayout = "home";   // フィードはA案（セクション型）に決定
       const [posts, setPosts] = usePersistentState("posts", () => makeInitialPosts(U));
       const [userThanks, setUserThanks] = usePersistentState("userThanks", () => 143);
       const [notices, setNotices] = usePersistentState("notices", () => []);
@@ -1975,17 +1975,21 @@ ${logsText}
         const target = posts.find(p => p.id === postId);
         if (!target) return;
 
-        const rect = e.currentTarget.getBoundingClientRect();
-        const heartId = Date.now();
-        setFloatingHearts(prev => [
-          ...prev,
-          { id: heartId, x: rect.left + rect.width / 2, y: rect.top - 10 }
-        ]);
-        setTimeout(() => {
-          setFloatingHearts(prev => prev.filter(h => h.id !== heartId));
-        }, 900);
-
         const newIsLiked = !target.isLiked;
+        const isQ = target.type === "question";
+        const earns = !isQ && !isMine(target.author);   // ポイントが動くのは、他の人の情報投稿への「助かった！」だけ
+
+        if (newIsLiked) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const heartId = Date.now();
+          setFloatingHearts(prev => [
+            ...prev,
+            { id: heartId, x: rect.left + rect.width / 2, y: rect.top - 10, label: isQ ? "気になる" : earns ? `+${POINT_RULES.thanks}pt` : "助かった！", icon: isQ ? "notifications" : "favorite" }
+          ]);
+          setTimeout(() => {
+            setFloatingHearts(prev => prev.filter(h => h.id !== heartId));
+          }, 900);
+        }
         setPosts(prevPosts =>
           prevPosts.map(p => p.id === postId ? { ...p, isLiked: newIsLiked, thanks: p.thanks + (newIsLiked ? 1 : -1) } : p)
         );
@@ -1997,15 +2001,20 @@ ${logsText}
             const canDemo = !target.author.includes("あなた") && target.commentsCount < SUMMARY_MIN_ANSWERS;
             showToast("🔔 「気になる」に追加しました。新しい回答が付いたらお知らせします");
             if (canDemo) watchTimers.current[postId] = setTimeout(() => deliverWatchedAnswer(postId), WATCH_DEMO_DELAY_MS);
-          } else {
-            setUserThanks(t => t + 1);
-            showToast(`💖 感謝が伝わりました！（通算${userThanks + 1}pt）`);
+          } else if (earns) {
+            setUserThanks(t => t + POINT_RULES.thanks);
           }
+        } else if (earns) {
+          setUserThanks(t => Math.max(0, t - POINT_RULES.thanks));   // 取り消したらポイントも戻す
         }
       };
 
       // 回答・コメントへの「助かった！」（多いものほど上に並びます）
       const handleCommentThanks = (postId, commentId) => {
+        const post = posts.find(p => p.id === postId);
+        const cmt = post && post.comments.find(c => c.id === commentId);
+        if (!cmt || isMine(cmt.user)) return;
+        setUserThanks(t => Math.max(0, t + (cmt.isLiked ? -POINT_RULES.thanks : POINT_RULES.thanks)));
         setPosts(prevPosts =>
           prevPosts.map(p => {
             if (p.id !== postId) return p;
@@ -2049,8 +2058,8 @@ ${logsText}
 
         setCommentInput("");
         if (isQ) {
-          setUserThanks(t => t + 3);
-          showToast("💬 回答を送信しました！（+3pt）");
+          setUserThanks(t => t + POINT_RULES.answer);
+          showToast(`💬 回答を送信しました（+${POINT_RULES.answer}pt）`);
         } else {
           showToast("💬 コメントを送信しました！");
         }
@@ -2116,8 +2125,8 @@ ${logsText}
         if (isQ) {
           showToast("🙋 質問を投稿しました！回答が付くとここに表示されます");
         } else {
-          setUserThanks(t => t + 10);
-          showToast("🎉 情報共有ありがとうございました！（+10サンクス獲得）");
+          setUserThanks(t => t + POINT_RULES.share);
+          showToast(`🎉 情報を共有しました（+${POINT_RULES.share}pt）`);
         }
       };
 
@@ -2575,21 +2584,8 @@ ${logsText}
                 ) : (
                   /* 未検索時（通常時）トップ表示 */
                   <div className="space-y-4">
-                    {/* 表示の切り替え（デモ：レイアウト比較用） */}
-                    <div className="flex items-center justify-between gap-2 px-1">
-                      <span className="text-[11px] text-mute">表示（デモ）</span>
-                      <div className="flex bg-sunk rounded-full p-0.5" role="tablist" aria-label="表示の切り替え">
-                        {FEED_LAYOUTS.map(l => (
-                          <button key={l.value} role="tab" aria-selected={feedLayout === l.value} onClick={() => setFeedLayout(l.value)}
-                            className={cx("px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 press", feedLayout === l.value ? "bg-surface text-ink shadow-soft" : "text-mute")}>
-                            <Icon n={l.icon} fill={feedLayout === l.value} size={14} />{l.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
 
-                    {feedLayout === "home" && (
-                      <div className="space-y-6">
+                    <div className="space-y-6">
                         {/* 回答を待っている質問（回答が少ない順） */}
                         <section className="space-y-2.5">
                           <SectionHead title="回答を待っている質問" action="すべて見る" onAction={() => setOnlyQuestions(true)} />
@@ -2628,38 +2624,8 @@ ${logsText}
                           </div>
                         </section>
                       </div>
-                    )}
+                    
 
-                    {feedLayout === "board" && (
-                      <div className="columns-2 gap-3">
-                        {filteredPosts.map((post, idx) => (
-                          <BoardCard key={post.id} post={post} idx={idx} unread={unreadByPost[post.id] || 0} onOpen={() => setSelectedPost(post)} onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }} />
-                        ))}
-                      </div>
-                    )}
-
-                    {feedLayout === "list" && (<>
-                    <div className="flex items-baseline justify-between px-1 pt-1">
-                      <h2 className="font-head font-black text-[20px]">新着</h2>
-                      <p className="text-[12px] text-mute">サンプル表示</p>
-                    </div>
-
-                    {filteredPosts.length === 0 && (
-                      <div className="text-center py-8 bg-surface rounded-3xl shadow-soft border border-line/70 text-sub text-[13px]">まだ表示できる投稿がありません</div>
-                    )}
-                    {filteredPosts.map((post, idx) => (
-                      <PostCard
-                        key={post.id}
-                        post={post}
-                        idx={idx}
-                        onOpen={() => setSelectedPost(post)}
-                        unread={unreadByPost[post.id] || 0}
-                          tokens={searchTokens}
-                          onTag={(t) => runSearch(`#${t}`)}
-                          onThanks={(e) => handleThanks(e, post.id)}
-                      />
-                    ))}
-                    </>)}
                   </div>
                 )}
               </div>
@@ -2743,7 +2709,7 @@ ${logsText}
 
                     <button onClick={handleCreatePost} className={cx(BTN_PRIMARY, "w-full flex items-center justify-center gap-1.5")}>
                       <Icon n="send" fill size={18} />
-                      <span>共有する（+10pt）</span>
+                      <span>共有する（+{POINT_RULES.share}pt）</span>
                     </button>
                   </div>
                 )}
@@ -3066,8 +3032,8 @@ ${logsText}
               style={{ left: Math.min(Math.max(h.x, 60), (window.innerWidth || 360) - 60), top: h.y }}
               className="fixed pointer-events-none z-50 text-love-ink flex items-center font-black text-[13px] animate-float-heart -translate-x-1/2 bg-surface border border-love/40 px-2.5 py-1 rounded-full shadow-lift"
             >
-              <Icon n="favorite" fill size={16} className="mr-0.5 text-love" />
-              <span>+1 Thank!</span>
+              <Icon n={h.icon || "favorite"} fill size={16} className={cx("mr-0.5", h.icon === "notifications" ? "text-brand" : "text-love")} />
+              <span>{h.label || "助かった！"}</span>
             </div>
           ))}
 
@@ -3249,7 +3215,7 @@ ${logsText}
                   </button>
                   <input
                     type="text"
-                    placeholder={isQuestion ? "回答を入力…（+3pt）" : "コメントを入力..."}
+                    placeholder={isQuestion ? `回答を入力…（+${POINT_RULES.answer}pt）` : "コメントを入力..."}
                     value={commentInput}
                     onChange={(e) => setCommentInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleAddComment(selectedPost.id); }}
@@ -3422,7 +3388,7 @@ ${logsText}
                     "bg-brand"
                   )}
                 >
-                  {newType === "question" ? "質問する" : "投稿する（+10pt）"}
+                  {newType === "question" ? "質問する" : `投稿する（+${POINT_RULES.share}pt）`}
                 </button>
               </div>
             </Sheet>
@@ -3690,7 +3656,7 @@ ${logsText}
                   <span className="w-12 h-12 rounded-2xl bg-brand text-on-brand flex items-center justify-center flex-shrink-0"><Icon n="lightbulb" fill size={28} /></span>
                   <span>
                     <span className="block font-head font-black text-[17px] text-brand-deep leading-tight">情報を投稿する</span>
-                    <span className="block text-[12px] text-brand-deep leading-snug mt-0.5">+10pt</span>
+                    <span className="block text-[12px] text-brand-deep leading-snug mt-0.5">+{POINT_RULES.share}pt</span>
                   </span>
                 </button>
               </div>
@@ -3810,6 +3776,12 @@ ${logsText}
                   <Icon n="stars" fill size={20} />
                   <span>{userThanks} pt</span>
                 </div>
+              </div>
+
+              <div className="mx-5 -mt-1 mb-3 flex justify-between text-[11px] text-sub">
+                {[["edit_note", "情報を投稿", POINT_RULES.share], ["forum", "質問に回答", POINT_RULES.answer], ["favorite", "助かった！", POINT_RULES.thanks]].map(([ic, l, n]) => (
+                  <span key={l} className="flex items-center gap-1"><Icon n={ic} size={14} className="text-brand-deep" />{l}<b className="text-ink">+{n}</b></span>
+                ))}
               </div>
 
               <div className="px-5 pb-3">
