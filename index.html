@@ -524,13 +524,14 @@
           content: "後期の必修で友達と別クラスになってしまいました。休んだ回のノートや課題の出し方を、みんなどうやって確認していますか？",
           thanks: 12,
           views: 96,
-          commentsCount: 2,
+          commentsCount: 3,
           time: "2時間前",
           isLiked: false,
           image: null,
           comments: [
             { id: 401, user: `${U.facultyShort}3年`, text: "同じ授業を取ってる人に1人だけでも声をかけておくと楽です。授業の最初に隣の人に聞くのがおすすめ。", time: "1時間前", thanks: 5, isLiked: false },
-            { id: 402, user: "匿名の学生", text: "シラバスに課題の出し方が書いてあることも多いので、まずそこを確認してみてください。", time: "30分前", thanks: 1, isLiked: false }
+            { id: 402, user: "匿名の学生", text: "シラバスに課題の出し方が書いてあることも多いので、まずそこを確認してみてください。", time: "30分前", thanks: 1, isLiked: false },
+            { id: 403, user: `${U.facultyShort}3年（あなた）`, text: "前の週のスライドは、学習支援システムに上がっていることが多いです。まずそこを見て、足りない分だけ人に聞くとラクですよ。", time: "1時間前", thanks: 2, isLiked: false }
           ]
         },
         {
@@ -633,12 +634,34 @@
           time: "3日前",
           isLiked: false,
           image: null,
+          bestAnswerId: 701,
+          bestThanks: "聞き方まで具体的で助かりました！体験のときに聞いてみます。",
           comments: [
             { id: 701, user: `${U.facultyShort}4年`, text: "体験に行ったとき、先輩に「月に何回活動があるか」と「年間でいくらかかるか」を直接聞くのが一番確実でした。", time: "2日前", thanks: 4, isLiked: false }
           ]
         }
       ];
       list.splice(2, 0, makeBigSamplePost(U));
+      // 自分の質問（回答が届いていて、ベストアンサーはまだ選んでいない）
+      list.splice(1, 0, {
+        id: 9,
+        type: "question",
+        author: `${U.facultyShort}3年（あなた）`,
+        grade: "3年",
+        category: "バイト・研究室",
+        title: "【質問】ゼミ選びで、2年のうちにやっておけばよかったことは？",
+        content: "来年ゼミが始まります。先輩たちが「2年のうちにやっておけばよかった」と思ったことがあれば知りたいです。",
+        thanks: 4,
+        views: 63,
+        commentsCount: 2,
+        time: "1日前",
+        isLiked: false,
+        image: null,
+        comments: [
+          { id: 901, user: `${U.facultyShort}4年`, text: "気になるゼミの説明会と、先輩の卒論発表会には行っておくべきでした。雰囲気が一番わかります。", time: "20時間前", thanks: 3, isLiked: false },
+          { id: 902, user: "匿名の学生", text: "統計ソフトの基本操作は早めに触っておくと、ゼミが始まってから困りません。", time: "30分前", thanks: 0, isLiked: false }
+        ]
+      });
       return list;
     }
 
@@ -1048,6 +1071,58 @@
       );
     }
 
+    // 最初から届いているお知らせ（デモ：自分の投稿・質問・回答への反応）
+    function makeInitialNotices(U) {
+      const now = Date.now();
+      return [
+        { id: "seed-1", postId: 9, kind: "answer", mine: true, title: "ゼミ選びで、2年のうちにやっておけばよかった…", preview: "統計ソフトの基本操作は早めに触っておくと、ゼミが始まってから困りません。", at: now - 30 * 60000, read: false },
+        { id: "seed-2", postId: 4, kind: "thanks_answer", mine: true, title: "友達と授業がかぶらないとき、ノートや課題…", preview: "", at: now - 50 * 60000, read: false },
+        { id: "seed-3", postId: 1, kind: "comment", mine: true, title: "【マクロ経済学Ⅰ】期末テスト出題傾向＆過去…", preview: "マクロ経済落としそうだったので本当に助かります！", at: now - 26 * 3600000, read: true }
+      ];
+    }
+
+    // 投稿からの経過（分）。新しい投稿は createdAt、サンプルは「2時間前」などの表示から読む
+    function ageMinutes(p) {
+      if (p.createdAt) return (Date.now() - p.createdAt) / 60000;
+      const t = String(p.time || "");
+      let m;
+      if (t === "たった今") return 0;
+      if ((m = t.match(/(\d+)分前/))) return +m[1];
+      if ((m = t.match(/(\d+)時間前/))) return +m[1] * 60;
+      if (t === "昨日") return 1440;
+      if ((m = t.match(/(\d+)日前/))) return +m[1] * 1440;
+      if ((m = t.match(/(\d+)週間前/))) return +m[1] * 10080;
+      return 1e7;
+    }
+    const isMineName = (name) => typeof name === "string" && name.includes("あなた");
+
+    // 🔔 お知らせの種類（自分の投稿・質問・回答への反応）
+    const NOTICE_KINDS = {
+      answer:        { icon: "forum",            mineLabel: "あなたの質問に回答が届きました", otherLabel: "気になる質問に回答が届きました", badge: "新しい回答" },
+      comment:       { icon: "chat",             mineLabel: "あなたの投稿にコメントが届きました", otherLabel: "コメントが届きました", badge: "新しいコメント" },
+      thanks_post:   { icon: "favorite",         mineLabel: "あなたの投稿に「助かった！」", otherLabel: "「助かった！」が付きました", badge: "助かった！" },
+      thanks_answer: { icon: "favorite",         mineLabel: "あなたの回答に「助かった！」", otherLabel: "「助かった！」が付きました", badge: "助かった！" },
+      best:          { icon: "workspace_premium", mineLabel: "あなたの回答がベストアンサーに選ばれました", otherLabel: "ベストアンサーが決まりました", badge: "ベストアンサー" },
+      ai:            { icon: "auto_awesome",     mineLabel: "AIからひとこと", otherLabel: "AIからひとこと", badge: "AIから" }
+    };
+    const noticeLabel = (n) => { const k = NOTICE_KINDS[n.kind] || NOTICE_KINDS.answer; return n.mine ? k.mineLabel : k.otherLabel; };
+
+    // 「あなたの〜」の目印
+    function MineBadge({ type, className }) {
+      return (
+        <span className={cx("inline-flex items-center gap-0.5 bg-brand-tint text-brand-deep text-[11px] font-black px-2 py-0.5 rounded-full", className)}>
+          <Icon n="person" fill size={13} />{type === "question" ? "あなたの質問" : type === "answer" ? "あなたの回答" : type === "comment" ? "あなたのコメント" : "あなたの投稿"}
+        </span>
+      );
+    }
+    function SolvedBadge({ className }) {
+      return (
+        <span className={cx("inline-flex items-center gap-0.5 border border-brand text-brand-deep text-[11px] font-black px-2 py-[1px] rounded-full", className)}>
+          <Icon n="check_circle" fill size={13} />解決済み
+        </span>
+      );
+    }
+
     function makeInitialCoupons(U) {
       return [
         { id: 901, storeId: "hoshino", title: "喫茶 ほしのみち｜ドリンク1杯 無料", cost: 100, date: "2026-10-10", expires: "2026-11-09", code: "TNG-HOSHI-8821", isUsed: false }
@@ -1377,31 +1452,37 @@
     }
 
     // ボード（2列）のカード：写真 or 表紙 ＋ 最小限の情報
-    function BoardCard({ post, idx, onOpen, onThanks, unread, tokens, topPick }) {
+    function BoardCard({ post, idx, onOpen, onThanks, unread, unreadLabel, tokens, topPick }) {
       const [bad, setBad] = useState(false);
+      const mine = isMineName(post.author);
       const hasImg = !!post.image && !bad;
       const isQ = post.type === "question";
       return (
-        <article onClick={onOpen} className="break-inside-avoid mb-3 bg-surface rounded-3xl overflow-hidden border border-line/70 shadow-soft cursor-pointer press animate-fade-up relative" style={{ animationDelay: `${Math.min(idx, 8) * 40}ms` }}>
+        <article onClick={onOpen} className={cx("break-inside-avoid mb-3 bg-surface rounded-3xl overflow-hidden border shadow-soft cursor-pointer press animate-fade-up relative", mine ? "border-brand ring-2 ring-brand/20" : "border-line/70")} style={{ animationDelay: `${Math.min(idx, 8) * 40}ms` }}>
           {hasImg
             ? <div className="aspect-[4/5] bg-sunk"><img src={post.image} alt="" loading="lazy" onError={() => setBad(true)} className="w-full h-full object-cover" /></div>
             : <TextCover post={post} tokens={tokens} className={post.id % 2 ? "aspect-[4/5]" : "aspect-square"} titleSize={16} />}
-          {unread > 0 && <span className={cx("absolute right-2.5 bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full shadow-soft", "top-2.5")}>新着</span>}
+          {unread > 0 && <span className="absolute right-2.5 top-2.5 bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full shadow-soft ring-2 ring-white/70 flex items-center gap-0.5"><Icon n="notifications_active" fill size={12} />{unreadLabel || "新着"}</span>}
           <div className="p-3 space-y-1.5">
             {topPick && <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-brand-deep"><Icon n="stars" fill size={14} />いちばんおすすめ</span>}
             {hasImg && <h3 className="font-bold text-[13.5px] leading-snug line-clamp-2"><Highlight text={plainTitle(post.title)} tokens={tokens} /></h3>}
             {tokens && tokens.length > 0 && <p className="text-[11.5px] text-sub leading-snug line-clamp-2"><Highlight text={post.content} tokens={tokens} /></p>}
             <div className="flex items-center gap-1.5">
-              <Avatar name={post.author} size={20} />
-              <span className="text-[11px] text-mute truncate flex-1 min-w-0">{post.author.replace("（あなた）", "")}</span>
+              {mine
+                ? <span className="flex-1 min-w-0"><MineBadge type={post.type} /></span>
+                : <><Avatar name={post.author} size={20} /><span className="text-[11px] text-mute truncate flex-1 min-w-0">{post.author}</span></>}
               <button onClick={onThanks} aria-label={isQ ? "気になる" : "助かった！"} className={cx("flex items-center gap-0.5 text-[12px] font-bold press", post.isLiked ? "text-love-ink" : "text-mute")}>
                 <Icon n="favorite" fill={post.isLiked} size={16} className={post.isLiked ? "text-love" : ""} />{post.thanks}
               </button>
             </div>
-            {isQ && (
+            {isQ && (post.bestAnswerId ? <SolvedBadge /> : (
               <span className={cx("inline-flex items-center gap-1 text-[11px] font-bold", post.commentsCount ? "text-sub" : "text-brand-deep")}>
                 <Icon n="forum" size={14} />{post.commentsCount ? `回答 ${post.commentsCount}` : "回答募集中"}
+                {mine && post.commentsCount > 0 && <span className="text-love-ink ml-1">BA未選択</span>}
               </span>
+            ))}
+            {!isQ && mine && post.commentsCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-sub"><Icon n="chat" size={14} />コメント {post.commentsCount}</span>
             )}
           </div>
         </article>
@@ -1409,12 +1490,14 @@
     }
 
     // ホームの「回答を待っている質問」カード（横スクロール）
-    function QuestionCard({ post, onOpen }) {
+    function QuestionCard({ post, onOpen, unreadLabel }) {
       const answerers = (post.comments || []).slice(0, 3);
+      const mine = isMineName(post.author);
       return (
-        <button onClick={onOpen} className="w-[248px] flex-shrink-0 text-left bg-surface rounded-3xl border border-line/70 shadow-soft p-4 flex flex-col gap-2.5 press">
+        <button onClick={onOpen} className={cx("w-[248px] flex-shrink-0 text-left bg-surface rounded-3xl border shadow-soft p-4 flex flex-col gap-2.5 press relative", mine ? "border-brand ring-2 ring-brand/20" : "border-line/70")}>
           <span className="flex items-center gap-1.5 text-[11px] text-mute">
-            <Icon n={catMeta(post.category).icon} fill size={14} className="text-brand-deep" />{catMeta(post.category).short}・{post.time}
+            {mine ? <MineBadge type="question" /> : <><Icon n={catMeta(post.category).icon} fill size={14} className="text-brand-deep" />{catMeta(post.category).short}・{post.time}</>}
+            {unreadLabel && <span className="ml-auto bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5"><Icon n="notifications_active" fill size={12} />{unreadLabel}</span>}
           </span>
           <span className="flex gap-2">
             <span className="font-head font-black text-[22px] leading-none text-brand">Q.</span>
@@ -1429,7 +1512,9 @@
             ) : (
               <span className="text-[11px] text-sub">{post.ai ? "先輩の回答待ち" : "まだ回答なし"}</span>
             )}
-            <span className="flex-shrink-0 bg-brand text-on-brand text-[12px] font-black px-3 py-1.5 rounded-full">答える</span>
+            {mine
+              ? <span className="flex-shrink-0 border border-brand text-brand-deep text-[12px] font-black px-3 py-1.5 rounded-full">{post.commentsCount ? "BAを選ぶ" : "確認する"}</span>
+              : <span className="flex-shrink-0 bg-brand text-on-brand text-[12px] font-black px-3 py-1.5 rounded-full">答える</span>}
           </span>
         </button>
       );
@@ -1607,7 +1692,7 @@
 
           {s.best && (
             <div className="bg-surface rounded-2xl p-3 space-y-1">
-              <span className="text-[12px] font-black text-brand-deep flex items-center gap-1"><Icon n="stars" fill size={14} />ベストアンサー</span>
+              <span className="text-[12px] font-black text-brand-deep flex items-center gap-1"><Icon n="favorite" fill size={14} />いちばん助かった回答</span>
               <p className="text-[13px] leading-relaxed">{s.best.text}</p>
             </div>
           )}
@@ -1673,9 +1758,9 @@
     function App() {
       const [currentTab, setCurrentTab] = useState(0);
       const feedLayout = "home";   // フィードはA案（セクション型）に決定
-      const [posts, setPosts] = usePersistentState("posts", () => makeInitialPosts(U));
+      const [posts, setPosts] = usePersistentState("posts_v2", () => makeInitialPosts(U));
       const [userThanks, setUserThanks] = usePersistentState("userThanks", () => 143);
-      const [notices, setNotices] = usePersistentState("notices", () => []);
+      const [notices, setNotices] = usePersistentState("notices_v2", () => makeInitialNotices(U));
       const [openNotices, setOpenNotices] = useState(false);
       const postsRef = useRef(posts);
       postsRef.current = posts;
@@ -1686,6 +1771,12 @@
         return m;
       }, [notices]);
       const unreadTotal = notices.filter(n => !n.read).length;
+      // 投稿ごとの未読のうち、いちばん新しいものの種類（カードの「新しい回答」などの表示に使う）
+      const unreadLabelByPost = useMemo(() => {
+        const m = {};
+        notices.forEach(n => { if (!n.read && !m[n.postId]) m[n.postId] = (NOTICE_KINDS[n.kind] || NOTICE_KINDS.answer).badge; });
+        return m;
+      }, [notices]);
       const [userGrade] = useState(3);
       const myLabel = `${U.facultyShort}${userGrade}年（あなた）`;
       
@@ -1815,8 +1906,11 @@
       };
 
       // 🔔 お知らせ（自分の質問への回答／「気になる」を押した質問の更新）
-      const pushNotice = (post, kind, preview) => {
-        setNotices(prev => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, postId: post.id, kind, title: shortQuestionTitle(post.title), preview: preview || "", at: Date.now(), read: false }, ...prev].slice(0, 30));
+      const pushNotice = (post, kind, preview, mineOverride) => {
+        const mine = mineOverride !== undefined ? mineOverride : isMineName(post.author);
+        const n = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, postId: post.id, kind, mine, title: shortQuestionTitle(post.title), preview: preview || "", at: Date.now(), read: false };
+        setNotices(prev => [n, ...prev].slice(0, 30));
+        if (kind !== "ai" && kind !== "answer") { showToast(`🔔 ${noticeLabel(n)}`); return; }
         showToast(kind === "ai" ? "💌 AIサポーターからメッセージが届きました（お知らせを見る →右上の🔔）" : "🔔 新しい回答が届きました（右上の🔔から見られます）");
       };
       // デモ：「気になる」を押した質問に、先輩の回答が届いたことにする
@@ -1829,6 +1923,50 @@
         pushNotice(cur, "answer", text);
       };
       const markAllNoticesRead = () => setNotices(prev => prev.map(n => ({ ...n, read: true })));
+
+      // デモ用：別の学生が反応したことにする（本番はサーバーからのお知らせ）
+      const DEMO_REACT_MS = { thanks: 6000, comment: 12000, answer: 10000 };
+      const DEMO_COMMENTS = ["わかりやすい！保存しました", "同じことを探していたので助かります", "この情報、もっと早く知りたかったです"];
+      const demoThanksOnPost = (postId) => setTimeout(() => {
+        const cur = postsRef.current.find(p => p.id === postId);
+        if (!cur) return;
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, thanks: p.thanks + 1 } : p));
+        pushNotice(cur, "thanks_post", "", true);
+      }, DEMO_REACT_MS.thanks);
+      const demoCommentOnPost = (postId) => setTimeout(() => {
+        const cur = postsRef.current.find(p => p.id === postId);
+        if (!cur) return;
+        const text = DEMO_COMMENTS[cur.comments.length % DEMO_COMMENTS.length];
+        const c = { id: Date.now(), user: `${U.peerA}1年`, text, time: "たった今", thanks: 0, isLiked: false };
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, commentsCount: p.commentsCount + 1, comments: [...p.comments, c] } : p));
+        pushNotice(cur, "comment", text, true);
+      }, DEMO_REACT_MS.comment);
+      const demoAnswerOnQuestion = (postId) => setTimeout(() => {
+        const cur = postsRef.current.find(p => p.id === postId);
+        if (!cur || cur.bestAnswerId) return;
+        const text = DEMO_ANSWERS[cur.comments.length % DEMO_ANSWERS.length];
+        const c = { id: Date.now(), user: `${U.facultyShort}4年`, text, time: "たった今", thanks: 0, isLiked: false };
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, commentsCount: p.commentsCount + 1, comments: [...p.comments, c] } : p));
+        pushNotice(cur, "answer", text, true);
+      }, DEMO_REACT_MS.answer);
+      const demoThanksOnMyComment = (postId, commentId, isAnswer) => setTimeout(() => {
+        const cur = postsRef.current.find(p => p.id === postId);
+        if (!cur) return;
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: p.comments.map(c => c.id === commentId ? { ...c, thanks: (c.thanks || 0) + 1 } : c) } : p));
+        pushNotice(cur, isAnswer ? "thanks_answer" : "thanks_post", "", true);
+      }, DEMO_REACT_MS.thanks);
+
+      // 🏅 ベストアンサー（知恵袋と同じく、質問者が回答から1つ選ぶ。選び直しは不可。選ぶと解決済み＝回答受付終了）
+      const [baTarget, setBaTarget] = useState(null);   // { postId, comment }
+      const [baThanks, setBaThanks] = useState("");
+      const confirmBestAnswer = () => {
+        if (!baTarget) return;
+        const { postId, comment } = baTarget;
+        setPosts(prev => prev.map(p => p.id === postId && !p.bestAnswerId ? { ...p, bestAnswerId: comment.id, bestThanks: baThanks.trim(), resolvedAt: Date.now() } : p));
+        setBaTarget(null);
+        setBaThanks("");
+        showToast("🏅 ベストアンサーを決定しました。質問は解決済みになりました");
+      };
 
       const isSearching = searchQuery.trim() !== "" || selectedTag !== "" || onlyQuestions;
 
@@ -2090,6 +2228,7 @@ ${logsText}
         );
 
         setCommentInput("");
+        demoThanksOnMyComment(postId, newCommentObj.id, isQ);
         if (isQ) {
           setUserThanks(t => t + POINT_RULES.answer);
           showToast(`💬 回答を送信しました（+${POINT_RULES.answer}pt）`);
@@ -2146,6 +2285,8 @@ ${logsText}
         };
 
         setPosts(prev => [newPostObj, ...prev]);
+        if (isQ) demoAnswerOnQuestion(newPostObj.id);
+        else { demoThanksOnPost(newPostObj.id); demoCommentOnPost(newPostObj.id); }
         setNewTitle("");
         setNewContent("");
         setNewImage(null);
@@ -2298,9 +2439,14 @@ ${logsText}
         return <GateScreen U={U} onEnter={() => setVerified(true)} />;
       }
 
+      const waitingQuestions = posts
+        .filter(p => p.type === "question" && !p.bestAnswerId)
+        .sort((a, b) => ((a.commentsCount === 0 ? 0 : 1) - (b.commentsCount === 0 ? 0 : 1)) || (ageMinutes(a) - ageMinutes(b)))
+        .slice(0, 6);
+
       const isQuestion = !!selectedPost && selectedPost.type === "question";
       const sortedComments = selectedPost
-        ? [...selectedPost.comments].sort((a, b) => (b.thanks || 0) - (a.thanks || 0))
+        ? [...selectedPost.comments].sort((a, b) => ((b.id === selectedPost.bestAnswerId) - (a.id === selectedPost.bestAnswerId)) || ((b.thanks || 0) - (a.thanks || 0)))
         : [];
       const showInstallBanner = !bannerDismissed && !IS_STANDALONE;
       const hasStudentAnswers = !!selectedPost && selectedPost.comments.length > 0;
@@ -2575,7 +2721,7 @@ ${logsText}
                             idx={idx}
                             topPick={idx === 0 && sortKey === "recommended"}
                             tokens={searchTokens}
-                            unread={unreadByPost[post.id] || 0}
+                            unread={unreadByPost[post.id] || 0} unreadLabel={unreadLabelByPost[post.id]}
                             onOpen={() => setSelectedPost(post)}
                             onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }}
                           />
@@ -2588,15 +2734,20 @@ ${logsText}
                   <div className="space-y-4">
 
                     <div className="space-y-6">
-                        {/* 回答を待っている質問（回答が少ない順） */}
+                        {/* 回答を待っている質問
+                            ・ベストアンサーが決まった（解決済み）質問は出さない。自分の質問は出す
+                            ・並び順：回答0件の質問が先 → その中で新しい順
+                            ・該当がなければ、この枠ごと隠す */}
+                        {waitingQuestions.length > 0 && (
                         <section className="space-y-2.5">
                           <SectionHead title="回答を待っている質問" action="すべて見る" onAction={() => setOnlyQuestions(true)} />
                           <ScrollRow className="flex gap-3 overflow-x-auto pb-2 scrollbar-none -mx-4 px-4">
-                            {posts.filter(p => p.type === "question").sort((a, b) => a.commentsCount - b.commentsCount).slice(0, 6).map(p => (
-                              <QuestionCard key={p.id} post={p} onOpen={() => setSelectedPost(p)} />
+                            {waitingQuestions.map(p => (
+                              <QuestionCard key={p.id} post={p} unreadLabel={unreadLabelByPost[p.id]} onOpen={() => setSelectedPost(p)} />
                             ))}
                           </ScrollRow>
                         </section>
+                        )}
 
                         {/* 札幌駅周辺のお店のチケット */}
                         <section className="space-y-2.5">
@@ -2621,7 +2772,7 @@ ${logsText}
                           <SectionHead title="みんなの投稿" />
                           <div className="columns-2 gap-3">
                             {filteredPosts.map((post, idx) => (
-                              <BoardCard key={post.id} post={post} idx={idx} unread={unreadByPost[post.id] || 0} onOpen={() => setSelectedPost(post)} onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }} />
+                              <BoardCard key={post.id} post={post} idx={idx} unread={unreadByPost[post.id] || 0} unreadLabel={unreadLabelByPost[post.id]} onOpen={() => setSelectedPost(post)} onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }} />
                             ))}
                           </div>
                         </section>
@@ -2839,26 +2990,59 @@ ${logsText}
                 {myPageSubTab === "posts" && (
                   <div className="space-y-3 w-full">
 
-                    {posts.filter(p => p.author.includes("あなた")).map(post => (
+                    {posts.filter(p => p.author.includes("あなた")).map(post => {
+                      const isQ = post.type === "question";
+                      const label = unreadLabelByPost[post.id];
+                      return (
                       <div
                         key={post.id}
                         onClick={() => setSelectedPost(post)}
-                        className="bg-surface p-4 rounded-3xl shadow-soft border border-line/70 space-y-2 cursor-pointer press"
+                        className={cx("bg-surface p-4 rounded-3xl shadow-soft border space-y-2 cursor-pointer press", label ? "border-brand ring-2 ring-brand/20" : "border-line/70")}
                       >
                         <div className="flex justify-between items-center gap-2">
-                          <div className="flex items-center gap-1.5">
-                            {post.type === "question" && <QuestionBadge />}
-                            <CategoryChip>{post.category}</CategoryChip>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <MineBadge type={post.type} />
+                            {isQ && post.bestAnswerId && <SolvedBadge />}
+                            {isQ && !post.bestAnswerId && post.commentsCount > 0 && <span className="text-[11px] font-black text-love-ink">ベストアンサー未選択</span>}
                           </div>
-                          <Icon n="public" size={16} className="text-mute" />
+                          {label && <span className="bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 flex-shrink-0"><Icon n="notifications_active" fill size={12} />{label}</span>}
                         </div>
-                        <h3 className="font-head font-bold text-[15px] leading-snug">{post.title}</h3>
+                        <h3 className="font-head font-bold text-[15px] leading-snug">{plainTitle(post.title)}</h3>
                         <div className="flex gap-3 items-center text-[12px] text-mute">
+                          <span className="flex items-center gap-1"><Icon n={isQ ? "forum" : "chat"} size={15} />{isQ ? "回答" : "コメント"} {post.commentsCount}</span>
+                          <span className="flex items-center gap-1"><Icon n="favorite" size={15} />{isQ ? "気になる" : "助かった！"} {post.thanks}</span>
                           <span className="flex items-center gap-1"><Icon n="visibility" size={15} />{post.views}</span>
-                          <span className="flex items-center gap-1"><Icon n="favorite" size={15} />{post.thanks}</span>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
+
+                    {/* あなたの回答（ほかの人の質問への回答） */}
+                    {posts.some(p => p.type === "question" && !isMine(p.author) && p.comments.some(c => isMine(c.user))) && (
+                      <p className="text-[12px] font-bold text-sub px-1 pt-2">あなたの回答</p>
+                    )}
+                    {posts.filter(p => p.type === "question" && !isMine(p.author) && p.comments.some(c => isMine(c.user))).map(post => {
+                      const my = post.comments.filter(c => isMine(c.user));
+                      const myThanks = my.reduce((a, c) => a + (c.thanks || 0), 0);
+                      const isBA = my.some(c => c.id === post.bestAnswerId);
+                      const label = unreadLabelByPost[post.id];
+                      return (
+                        <div key={post.id} onClick={() => setSelectedPost(post)} className={cx("bg-surface p-4 rounded-3xl shadow-soft border space-y-2 cursor-pointer press", label ? "border-brand ring-2 ring-brand/20" : "border-line/70")}>
+                          <div className="flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <MineBadge type="answer" />
+                              {isBA && <span className="inline-flex items-center gap-0.5 bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full"><Icon n="workspace_premium" fill size={13} />ベストアンサー</span>}
+                            </div>
+                            {label && <span className="bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 flex-shrink-0"><Icon n="notifications_active" fill size={12} />{label}</span>}
+                          </div>
+                          <h3 className="font-head font-bold text-[14px] leading-snug text-sub">Q. {plainTitle(post.title)}</h3>
+                          <p className="text-[13px] leading-relaxed line-clamp-2">{my[0].text}</p>
+                          <div className="flex gap-3 items-center text-[12px] text-mute">
+                            <span className="flex items-center gap-1"><Icon n="favorite" size={15} />助かった！ {myThanks}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -2877,7 +3061,7 @@ ${logsText}
                           key={post.id}
                           post={post}
                           idx={idx}
-                          unread={unreadByPost[post.id] || 0}
+                          unread={unreadByPost[post.id] || 0} unreadLabel={unreadLabelByPost[post.id]}
                           onOpen={() => setSelectedPost(post)}
                           onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }}
                         />
@@ -3059,7 +3243,8 @@ ${logsText}
                   <div className="min-w-0">
                     <div className="text-[13px] font-bold truncate">{selectedPost.author}</div>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {isQuestion && <QuestionBadge />}
+                      {isMine(selectedPost.author) && <MineBadge type={selectedPost.type} />}
+                      {isQuestion && (selectedPost.bestAnswerId ? <SolvedBadge /> : <QuestionBadge />)}
                       <CategoryChip>{selectedPost.category}</CategoryChip>
                     </div>
                   </div>
@@ -3119,6 +3304,12 @@ ${logsText}
                       <span className="ml-2 text-[12px] font-medium text-mute font-sans">人気順</span>
                     )}
                   </h3>
+                  {isQuestion && isMine(selectedPost.author) && !selectedPost.bestAnswerId && selectedPost.comments.some(c => !isMine(c.user)) && (
+                    <div className="bg-brand-tint rounded-2xl px-3.5 py-3 text-[12.5px] text-brand-deep font-bold flex items-start gap-2">
+                      <Icon n="workspace_premium" fill size={18} className="flex-shrink-0" />
+                      <span>いちばん納得できた回答を「ベストアンサー」に選ぶと、質問は解決済みになります</span>
+                    </div>
+                  )}
                   {isQuestion && selectedPost.ai && <AiAnswerCard key={selectedPost.id} ai={selectedPost.ai} hasStudentAnswers={hasStudentAnswers} />}
                   <div className="space-y-2.5">
                     {sortedComments.length === 0 ? (
@@ -3146,27 +3337,44 @@ ${logsText}
                             </div>
                           );
                         }
-                        const best = idx === 0 && (c.thanks || 0) > 0;
+                        const isBA = selectedPost.bestAnswerId === c.id;
+                        const topThanks = !selectedPost.bestAnswerId && idx === 0 && (c.thanks || 0) > 0;
                         const mine = isMine(c.user);
+                        const canPickBA = isQuestion && isMine(selectedPost.author) && !selectedPost.bestAnswerId && !mine;
                         return (
                           <div
                             key={c.id}
                             className={cx(
                               "p-3.5 rounded-3xl space-y-2",
-                              best ? "bg-surface border-2 border-brand" : "bg-sunk"
+                              isBA ? "bg-surface border-2 border-brand" : mine ? "bg-brand-tint/60 border border-brand/40" : "bg-sunk"
                             )}
                           >
-                            {best && (
+                            {isBA && (
                               <span className="inline-flex items-center gap-1 bg-brand text-on-brand text-[12px] font-black px-2.5 py-0.5 rounded-full">
-                                <Icon n="stars" fill size={14} />ベストアンサー
+                                <Icon n="workspace_premium" fill size={14} />ベストアンサー
+                              </span>
+                            )}
+                            {topThanks && (
+                              <span className="inline-flex items-center gap-1 text-love-ink text-[12px] font-black">
+                                <Icon n="favorite" fill size={14} />いちばん助かった
                               </span>
                             )}
                             <div className="flex items-center gap-2">
                               <Avatar name={c.user} size={28} />
-                              <span className="text-[13px] font-bold text-ink flex-1 min-w-0 truncate">{c.user}</span>
+                              <span className="text-[13px] font-bold text-ink flex-1 min-w-0 truncate flex items-center gap-1.5">{mine ? <MineBadge type={isQuestion ? "answer" : "comment"} /> : c.user}</span>
                               <span className="text-mute text-[12px]">{c.time}</span>
                             </div>
                             <p className="text-ink text-[14px] leading-relaxed break-words whitespace-pre-wrap">{c.text}</p>
+                            {isBA && selectedPost.bestThanks && (
+                              <div className="bg-brand-tint rounded-2xl px-3 py-2.5 text-[13px] leading-relaxed">
+                                <span className="block text-[11px] font-black text-brand-deep mb-0.5">質問者からのお礼</span>{selectedPost.bestThanks}
+                              </div>
+                            )}
+                            {canPickBA && (
+                              <button onClick={() => { setBaThanks(""); setBaTarget({ postId: selectedPost.id, comment: c }); }} className="w-full border-[1.5px] border-brand text-brand-deep font-black text-[13px] py-2 rounded-2xl flex items-center justify-center gap-1 press">
+                                <Icon n="workspace_premium" size={17} />ベストアンサーに選ぶ
+                              </button>
+                            )}
                             <div className="flex justify-between items-center">
                               <button
                                 onClick={() => handleCommentThanks(selectedPost.id, c.id)}
@@ -3202,6 +3410,11 @@ ${logsText}
                 </div>
               </div>
 
+              {isQuestion && selectedPost.bestAnswerId ? (
+              <div className="px-4 pt-3 pb-4 border-t border-line bg-surface text-center text-[13px] text-sub font-bold flex items-center justify-center gap-1.5">
+                <Icon n="check_circle" fill size={18} className="text-brand" />解決済みのため、回答の受付は終了しました
+              </div>
+              ) : (
               <div className="px-4 pt-2.5 pb-3.5 border-t border-line bg-surface space-y-1.5">
                 {answerAnonymous && (
                   <p className="text-[12px] text-brand-deep font-bold flex items-center gap-1"><Icon n="visibility_off" fill size={14} />匿名で送信</p>
@@ -3232,6 +3445,7 @@ ${logsText}
                   </button>
                 </div>
               </div>
+              )}
             </Sheet>
           )}
 
@@ -3744,7 +3958,7 @@ ${logsText}
                   <div className="text-center py-8 space-y-2">
                     <div className="w-14 h-14 rounded-3xl bg-sunk text-mute mx-auto flex items-center justify-center"><Icon n="notifications_none" size={30} /></div>
                     <p className="font-head font-black text-[15px]">まだお知らせはありません</p>
-                    <p className="text-[12px] text-sub">「気になる」した質問の回答が届きます</p>
+                    <p className="text-[12px] text-sub">自分の質問・回答・投稿への反応と、「気になる」した質問の回答が届きます</p>
                   </div>
                 ) : notices.map(n => (
                   <button
@@ -3752,11 +3966,11 @@ ${logsText}
                     onClick={() => { setOpenNotices(false); setSelectedPostId(n.postId); }}
                     className={cx("w-full text-left rounded-2xl p-3.5 flex gap-3 items-start press", n.read ? "bg-sunk" : "bg-brand-tint")}
                   >
-                    <span className={cx("w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0", n.kind === "ai" ? "bg-sky-tint text-sky-ink" : "bg-surface text-brand-deep")}>
-                      <Icon n={n.kind === "ai" ? "volunteer_activism" : "forum"} fill size={20} />
+                    <span className={cx("w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0", n.kind === "ai" ? "bg-sky-tint text-sky-ink" : n.kind.startsWith("thanks") ? "bg-surface text-love" : "bg-surface text-brand-deep")}>
+                      <Icon n={(NOTICE_KINDS[n.kind] || NOTICE_KINDS.answer).icon} fill size={20} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] font-black leading-snug">{n.kind === "ai" ? "AIからひとこと" : "新しい回答"}</span>
+                      <span className="block text-[13px] font-black leading-snug">{noticeLabel(n)}</span>
                       <span className="block text-[12px] text-sub mt-0.5 truncate">「{n.title}」</span>
                       {n.preview && <span className="block text-[12px] text-ink mt-1 line-clamp-2 leading-relaxed">{n.preview}</span>}
                       <span className="block text-[12px] text-mute mt-1">{agoLabel(n.at)}</span>
@@ -3764,7 +3978,7 @@ ${logsText}
                     {!n.read && <span className="w-2.5 h-2.5 rounded-full bg-brand flex-shrink-0 mt-1.5" aria-label="未読"></span>}
                   </button>
                 ))}
-                <p className="text-[12px] text-mute pt-1">※ デモ：「気になる」の約6秒後に回答が届きます</p>
+                <p className="text-[12px] text-mute pt-1">※ デモ：投稿・回答・「気になる」の数秒後に、ほかの学生の反応が届いたことにしています</p>
               </div>
             </Sheet>
           )}
@@ -3946,6 +4160,31 @@ ${logsText}
                 </div>
               </div>
             </Sheet>
+          )}
+
+          {/* 🏅 ベストアンサーの確認（選び直しはできない） */}
+          {baTarget && (
+            <Dialog onClose={() => setBaTarget(null)} z={70}>
+              <div className="p-5 space-y-4">
+                <div className="text-center space-y-1">
+                  <Icon n="workspace_premium" fill size={36} className="text-brand" />
+                  <h3 className="font-head font-black text-[17px]">この回答をベストアンサーにしますか？</h3>
+                </div>
+                <p className="bg-sunk rounded-2xl p-3 text-[13px] leading-relaxed line-clamp-4">{baTarget.comment.text}</p>
+                <div>
+                  <label className={LABEL} htmlFor="ba-thanks">回答者へのお礼（任意）</label>
+                  <textarea id="ba-thanks" rows="2" value={baThanks} onChange={(e) => setBaThanks(e.target.value)} placeholder="例：具体的で助かりました！" className={cx(INPUT, "leading-relaxed")} />
+                </div>
+                <ul className="text-[12px] text-sub space-y-0.5">
+                  <li>・選び直しはできません</li>
+                  <li>・質問は解決済みになり、回答の受付を終了します</li>
+                </ul>
+                <div className="flex gap-2">
+                  <button onClick={() => setBaTarget(null)} className={cx(BTN_SOFT, "flex-1")}>やめる</button>
+                  <button onClick={confirmBestAnswer} className={cx(BTN_PRIMARY, "flex-1")}>決定する</button>
+                </div>
+              </div>
+            </Dialog>
           )}
 
           {/* 🏪 お店で使う（非接触：お店のQRを読む → スライドで確定 → 完了画面を見せる） */}
