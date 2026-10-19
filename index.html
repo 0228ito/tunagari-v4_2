@@ -214,6 +214,16 @@
     /* 完了画面：常に動き続けるバー（静止画＝スクリーンショットではないことの確認用） */
     @keyframes liveSweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
     .live-sweep { animation: liveSweep 1.6s linear infinite; }
+    /* 全画面ページ：右から入ってくる */
+    /* 自己分析レポート */
+    @keyframes revealUp { 0% { opacity: 0; transform: translateY(18px) scale(.96); } 100% { opacity: 1; transform: none; } }
+    .animate-reveal { animation: revealUp .6s cubic-bezier(.22,1,.36,1) both; }
+    @keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    .animate-grow { transform-origin: left; animation: growX .9s cubic-bezier(.22,1,.36,1) both; }
+    @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    .animate-floaty { animation: floaty 3.2s ease-in-out infinite; }
+    @keyframes pushIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    .animate-push-in { animation: pushIn .28s cubic-bezier(.22,1,.36,1) both; }
     @keyframes stampIn { 0% { transform: scale(1.8) rotate(-12deg); opacity: 0; } 60% { transform: scale(.92) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-12deg); opacity: 1; } }
     .animate-stamp { animation: stampIn .45s cubic-bezier(.34,1.56,.64,1) both; }
     /* 読み取り枠のスキャンライン */
@@ -253,6 +263,11 @@
         facultyBuilding: "経済学部2号館",
         building: "理学部2号館",     // 休講掲示板のサンプル用
         dining: "北部食堂",          // 学食のサンプル用
+        website: "https://www.hokudai.ac.jp/",
+        sns: [
+          { label: "X（旧Twitter）", handle: "@HokkaidoUnivPR", url: "https://x.com/HokkaidoUnivPR", icon: "alternate_email" },
+          { label: "Instagram", handle: "@hokkaidounivpr", url: "https://www.instagram.com/hokkaidounivpr/", icon: "photo_camera" }
+        ],
         peerA: "総合理系", peerB: "物理", peerC: "文学部"  // 他学部の学生のサンプル表示用
       },
       otaru: {
@@ -263,6 +278,8 @@
         facultyBuilding: "講義棟",
         building: "講義棟",
         dining: "学食",
+        website: "https://www.otaru-uc.ac.jp/",
+        sns: [],
         peerA: "商", peerB: "商", peerC: "商"
       }
     };
@@ -277,6 +294,11 @@
     //   ※ 保存先は端末ごとです。他の学生の端末とは共有されません（共有にはサーバーが必要）
     // ============================================================
     const STORAGE_PREFIX = `tunagari-proto-261015ai:${UNIV_ID}:`;
+
+    // 🗳 プレミアム機能の投票の送り先（Google Apps Script の WebアプリURL を貼る）
+    //   ・空のままだと、投票はこの端末にだけ保存されます（集計されません）
+    //   ・URL末尾に ?test=1 を付けて開くと「テスト」として記録されます（チーム内の確認用）
+    const VOTE_ENDPOINT = "https://docs.google.com/spreadsheets/d/16Fm745CTlXKEs1iokFCr9faRri4cOz6hzvW_Jd6O99w/edit?usp=sharing";
 
     function usePersistentState(key, initialFactory) {
       const [value, setValue] = useState(() => {
@@ -339,7 +361,8 @@
       "暮らし・家探し",
       "体調・健康",
       "新歓・サークル",
-      "バイト・研究室"
+      "バイト・研究室",
+      "その他"
     ];
 
     const REPORT_REASONS = [
@@ -359,14 +382,15 @@
 
     // AIサポーターの文面（機械的にならないよう、やさしい話し言葉で。カテゴリごとに、気持ちに寄り添う一言＋参考になりそうなこと）
     const AI_INTROS = {
-      "授業・過去問": "先輩の回答が届くまで、まずはここから。",
-      "休講・掲示板": "先輩の回答が届くまで、まずはここから。",
-      "グルメ・学食": "先輩の回答が届くまで、まずはここから。",
-      "作業スペース": "先輩の回答が届くまで、まずはここから。",
-      "暮らし・家探し": "先輩の回答が届くまで、まずはここから。",
+      "授業・過去問": "みんなの回答が届くまで、まずはここから。",
+      "休講・掲示板": "みんなの回答が届くまで、まずはここから。",
+      "グルメ・学食": "みんなの回答が届くまで、まずはここから。",
+      "作業スペース": "みんなの回答が届くまで、まずはここから。",
+      "暮らし・家探し": "みんなの回答が届くまで、まずはここから。",
       "体調・健康": "つらいときは、ひとりで抱えないで。",
-      "新歓・サークル": "先輩の回答が届くまで、まずはここから。",
-      "バイト・研究室": "先輩の回答が届くまで、まずはここから。"
+      "新歓・サークル": "みんなの回答が届くまで、まずはここから。",
+      "バイト・研究室": "みんなの回答が届くまで、まずはここから。",
+      "その他": "みんなの回答が届くまで、まずはここから。"
     };
     const AI_TIPS = {
       "授業・過去問": ["シラバスで成績の付け方を確認", "試験ルールは学務の案内が確実", "同じ授業の先輩に一言聞いてみる"],
@@ -376,7 +400,8 @@
       "暮らし・家探し": ["通学時間と手段を比べる", "昼と夜の両方で現地を歩く", "初期費用・光熱費も確認"],
       "体調・健康": ["無理せず休む・保健センターに相談", "重い・長引くときは早めに受診", "AIは診断できません"],
       "新歓・サークル": ["見学で頻度・費用・雰囲気を確認", "いくつか見比べる", "年間の費用を先輩に聞く"],
-      "バイト・研究室": ["時給・シフト・勤務地を比べる", "研究室は見学と先輩への相談", "学内のキャリア窓口も頼れる"]
+      "バイト・研究室": ["時給・シフト・勤務地を比べる", "研究室は見学と先輩への相談", "学内のキャリア窓口も頼れる"],
+      "その他": ["状況と知りたいことを書き足す", "公式の案内や窓口も確認", "ハッシュタグを付けると見つけてもらいやすい"]
     };
 
     function makeAiAnswer(category, title) {
@@ -487,7 +512,7 @@
     }
 
     // 「気になる」を押した質問の更新のお知らせ（デモ）
-    //   ・デモでは、気になるを押した約6秒後に「先輩の回答が届いた」ことにして、お知らせの体験を確認できます
+    //   ・デモでは、気になるを押した約6秒後に「ほかの学生の回答が届いた」ことにして、お知らせの体験を確認できます
     //   ・本番では、実際に他の学生が回答したタイミングで、アプリのお知らせ（＋LINE・メール等）として届ける想定です
     const WATCH_DEMO_DELAY_MS = 6000;
     const shortQuestionTitle = (t) => {
@@ -662,6 +687,7 @@
           { id: 902, user: "匿名の学生", text: "統計ソフトの基本操作は早めに触っておくと、ゼミが始まってから困りません。", time: "30分前", thanks: 0, isLiked: false }
         ]
       });
+      list.forEach(p => { if (SAMPLE_TAGS[p.id]) p.tags = SAMPLE_TAGS[p.id]; });
       return list;
     }
 
@@ -1191,13 +1217,94 @@
       return g ? g.map(norm) : [n];
     };
     // 投稿に付くハッシュタグ（本文の「#〇〇」＋本文に含まれる話題から自動で付与）
+    function TagInput({ tags, setTags, suggestions, bodyTags }) {
+      const [draft, setDraft] = useState("");
+      const MAX = 5;
+      const add = (raw) => {
+        const t = normTag(raw);
+        if (!t || tags.includes(t) || tags.length >= MAX) { setDraft(""); return; }
+        setTags([...tags, t]);
+        setDraft("");
+      };
+      const onKey = (e) => {
+        if (e.nativeEvent.isComposing) return;
+        if (e.key === "Enter" || e.key === " " || e.key === "," || e.key === "、") { e.preventDefault(); add(draft); }
+        else if (e.key === "Backspace" && !draft && tags.length) setTags(tags.slice(0, -1));
+      };
+      const extra = (bodyTags || []).filter(t => !tags.includes(t));
+      return (
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <label className={LABEL} htmlFor="tag-input">ハッシュタグ（{tags.length}/{MAX}）</label>
+            <span className="text-[11px] text-mute">同じタグの投稿をまとめて探せます</span>
+          </div>
+          <div className="w-full bg-sunk rounded-2xl px-3 py-2 flex flex-wrap items-center gap-1.5 border border-transparent focus-within:border-brand focus-within:bg-surface transition-colors" onClick={() => { const el = document.getElementById("tag-input"); if (el) el.focus(); }}>
+            {tags.map(t => (
+              <span key={t} className="bg-brand-tint text-brand-deep text-[13px] font-bold pl-2.5 pr-1 py-1 rounded-full flex items-center gap-0.5">
+                #{t}
+                <button type="button" onClick={() => setTags(tags.filter(x => x !== t))} aria-label={`#${t}を外す`} className="w-5 h-5 rounded-full flex items-center justify-center text-brand-deep/70 press"><Icon n="close" size={14} /></button>
+              </span>
+            ))}
+            {tags.length < MAX && (
+              <span className="flex items-center flex-1 min-w-[120px]">
+                <span className="text-brand-deep font-bold text-[14px]">#</span>
+                <input id="tag-input" type="text" value={draft} onChange={(e) => setDraft(e.target.value.replace(/^[#＃]+/, ""))} onKeyDown={onKey} onBlur={() => draft && add(draft)}
+                  placeholder={tags.length ? "続けて入力" : "例：過去問"} enterKeyHint="done" className="flex-1 min-w-0 bg-transparent outline-none text-[14px] py-1 pl-0.5 placeholder:text-mute" />
+              </span>
+            )}
+          </div>
+          {extra.length > 0 && (
+            <p className="text-[11.5px] text-sub">本文の <span className="font-bold text-brand-deep">{extra.map(t => `#${t}`).join(" ")}</span> も付きます</p>
+          )}
+          {suggestions.filter(t => !tags.includes(t)).length > 0 && tags.length < MAX && (
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[11.5px] text-mute self-center mr-0.5">候補</span>
+              {suggestions.filter(t => !tags.includes(t)).slice(0, 6).map(t => (
+                <button key={t} type="button" onClick={() => add(t)} className="border border-line text-sub text-[12px] font-bold px-2.5 py-1 rounded-full press">#{t}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 本文中の「#〇〇」を取り出す（SNSと同じ書き方）
+    const hashtagsInText = (text) => Array.from(String(text || "").matchAll(/[#＃]([^\s#＃、。，,！!？?「」（）()]+)/g)).map(m => m[1]);
+    const normTag = (t) => String(t || "").trim().replace(/^[#＃]+/, "").replace(/[\s、。，,]+/g, "").slice(0, 20);
     const extractTags = (post) => {
-      const raw = `${post.title} ${post.content}`;
-      const explicit = Array.from(raw.matchAll(/[#＃]([^\s#＃、。，,！!？?「」（）()]+)/g)).map(m => m[1]);
-      const hay = norm(raw);
-      const auto = SYNONYM_GROUPS.filter(g => g.some(m => hay.includes(norm(m)))).map(g => g[0]);
-      return Array.from(new Set([...explicit, ...auto])).slice(0, 3);
+      // 投稿者が付けたタグ（＋本文の#〇〇）。付いていない古い投稿だけ、話題から自動で補う
+      const own = [...(post.tags || []), ...hashtagsInText(`${post.title} ${post.content}`)];
+      if (own.length) return Array.from(new Set(own)).slice(0, 5);
+      const hay = norm(`${post.title} ${post.content}`);
+      return SYNONYM_GROUPS.filter(g => g.some(m => hay.includes(norm(m)))).map(g => g[0]).slice(0, 3);
     };
+    // カテゴリごとに出す、タグの候補
+    const CATEGORY_TAG_HINTS = {
+      "授業・過去問": ["過去問", "楽単", "ノート共有", "期末"],
+      "休講・掲示板": ["休講", "補講", "掲示板"],
+      "グルメ・学食": ["学食", "ランチ", "安い"],
+      "作業スペース": ["作業スペース", "コンセント", "自習"],
+      "暮らし・家探し": ["一人暮らし", "家探し", "自転車"],
+      "体調・健康": ["保健センター", "病院"],
+      "新歓・サークル": ["サークル", "新歓", "費用"],
+      "バイト・研究室": ["バイト", "ゼミ", "研究室"],
+      "その他": ["雑談", "おすすめ"]
+    };
+    // 質問の「くわしい状況」の書き方の例（カテゴリごと）
+    const DETAIL_PLACEHOLDER = {
+      "授業・過去問": "例）\n・今の状況：経済学部1年。後期の必修で友達と別クラス\n・困っていること：休んだ回の課題の出し方がわからない\n・知りたいこと：みんなはどうやって情報を集めているか",
+      "休講・掲示板": "例）\n・どの授業・建物か：理学部2号館の〇〇の授業\n・知りたいこと：今週の休講・補講が出ているか\n・確認済みのこと：公式ポータルはまだ更新なし",
+      "グルメ・学食": "例）\n・予算と時間：昼休み30分・600円以内\n・好み：がっつり食べたい／一人で入りやすい\n・知りたいこと：空いている時間帯やおすすめメニュー",
+      "作業スペース": "例）\n・使いたい時間：平日の3〜5限\n・条件：コンセントあり／静かな場所\n・知りたいこと：図書館以外で空いている場所",
+      "暮らし・家探し": "例）\n・今の状況：来年度から一人暮らし予定\n・条件：家賃5万円以内・自転車で通いたい\n・知りたいこと：住んでよかったエリアと注意点",
+      "体調・健康": "例）\n・今の状況：数日前から体調がすぐれない\n・知りたいこと：学内で相談できる窓口や受診先\n※ つらいときは、無理せず医療機関や保健センターへ",
+      "新歓・サークル": "例）\n・今の状況：1年。運動系と文化系で迷っている\n・気にしていること：活動頻度・年間の費用・兼部できるか\n・知りたいこと：入る前に確認しておくべきこと",
+      "バイト・研究室": "例）\n・今の状況：2年。来年のゼミ選びを考え始めた\n・気にしていること：指導スタイル・活動量\n・知りたいこと：選ぶときに見ておくといいところ",
+      "その他": "例）\n・今の状況：\n・困っていること：\n・知りたいこと："
+    };
+
+    // サンプル投稿のタグ
+    const SAMPLE_TAGS = { 1: ["マクロ経済", "過去問", "期末"], 2: ["休講", "掲示板"], 3: ["学食", "ランチ"], 4: ["ノート共有", "履修"], 5: ["一人暮らし", "家探し"], 6: ["作業スペース", "コンセント"], 7: ["サークル", "新歓"], 8: ["履修", "シラバス"], 9: ["ゼミ"] };
     // 「2時間前」「昨日」などの表示を、新着順に並べるための数値（分）にする
     const minutesAgo = (p) => {
       if (p.createdAt) return Math.max(0, (Date.now() - p.createdAt) / 60000);
@@ -1423,7 +1530,8 @@
       "暮らし・家探し": { icon: "home", short: "暮らし" },
       "体調・健康": { icon: "healing", short: "体調" },
       "新歓・サークル": { icon: "celebration", short: "サークル" },
-      "バイト・研究室": { icon: "work", short: "バイト" }
+      "バイト・研究室": { icon: "work", short: "バイト" },
+      "その他": { icon: "more_horiz", short: "その他" }
     };
     const catMeta = (c) => CATEGORY_META[c] || { icon: "article", short: c };
     const plainTitle = (t) => String(t || "").replace(/^【質問】\s*/, "");
@@ -1452,7 +1560,7 @@
     }
 
     // ボード（2列）のカード：写真 or 表紙 ＋ 最小限の情報
-    function BoardCard({ post, idx, onOpen, onThanks, unread, unreadLabel, tokens, topPick }) {
+    function BoardCard({ post, idx, onOpen, onThanks, unread, unreadLabel, tokens, topPick, onTag }) {
       const [bad, setBad] = useState(false);
       const mine = isMineName(post.author);
       const hasImg = !!post.image && !bad;
@@ -1462,11 +1570,19 @@
           {hasImg
             ? <div className="aspect-[4/5] bg-sunk"><img src={post.image} alt="" loading="lazy" onError={() => setBad(true)} className="w-full h-full object-cover" /></div>
             : <TextCover post={post} tokens={tokens} className={post.id % 2 ? "aspect-[4/5]" : "aspect-square"} titleSize={16} />}
-          {unread > 0 && <span className="absolute right-2.5 top-2.5 bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full shadow-soft ring-2 ring-white/70 flex items-center gap-0.5"><Icon n="notifications_active" fill size={12} />{unreadLabel || "新着"}</span>}
+          
           <div className="p-3 space-y-1.5">
+            {unread > 0 && <span className="inline-flex items-center gap-0.5 bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full"><Icon n="notifications_active" fill size={12} />{unreadLabel || "新着"}</span>}
             {topPick && <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-brand-deep"><Icon n="stars" fill size={14} />いちばんおすすめ</span>}
             {hasImg && <h3 className="font-bold text-[13.5px] leading-snug line-clamp-2"><Highlight text={plainTitle(post.title)} tokens={tokens} /></h3>}
             {tokens && tokens.length > 0 && <p className="text-[11.5px] text-sub leading-snug line-clamp-2"><Highlight text={post.content} tokens={tokens} /></p>}
+            {onTag && (post.tags || []).length > 0 && (
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                {post.tags.slice(0, 2).map(t => (
+                  <button key={t} onClick={(e) => { e.stopPropagation(); onTag(t); }} className="text-[11.5px] font-bold text-brand-deep press">#{t}</button>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               {mine
                 ? <span className="flex-1 min-w-0"><MineBadge type={post.type} /></span>
@@ -1490,11 +1606,11 @@
     }
 
     // ホームの「回答を待っている質問」カード（横スクロール）
-    function QuestionCard({ post, onOpen, unreadLabel }) {
+    function QuestionCard({ post, onOpen, unreadLabel, wide }) {
       const answerers = (post.comments || []).slice(0, 3);
       const mine = isMineName(post.author);
       return (
-        <button onClick={onOpen} className={cx("w-[248px] flex-shrink-0 text-left bg-surface rounded-3xl border shadow-soft p-4 flex flex-col gap-2.5 press relative", mine ? "border-brand ring-2 ring-brand/20" : "border-line/70")}>
+        <button onClick={onOpen} className={cx(wide ? "w-full" : "w-[248px] flex-shrink-0", "text-left bg-surface rounded-3xl border shadow-soft p-4 flex flex-col gap-2.5 press relative", mine ? "border-brand ring-2 ring-brand/20" : "border-line/70")}>
           <span className="flex items-center gap-1.5 text-[11px] text-mute">
             {mine ? <MineBadge type="question" /> : <><Icon n={catMeta(post.category).icon} fill size={14} className="text-brand-deep" />{catMeta(post.category).short}・{post.time}</>}
             {unreadLabel && <span className="ml-auto bg-brand text-on-brand text-[11px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5"><Icon n="notifications_active" fill size={12} />{unreadLabel}</span>}
@@ -1510,13 +1626,571 @@
                 <span className="text-[11px] text-sub truncate">{post.commentsCount}人が回答</span>
               </span>
             ) : (
-              <span className="text-[11px] text-sub">{post.ai ? "先輩の回答待ち" : "まだ回答なし"}</span>
+              <span className="text-[11px] text-sub">{post.ai ? "AIが返信済み・回答募集中" : "まだ回答なし"}</span>
             )}
             {mine
               ? <span className="flex-shrink-0 border border-brand text-brand-deep text-[12px] font-black px-3 py-1.5 rounded-full">{post.commentsCount ? "BAを選ぶ" : "確認する"}</span>
               : <span className="flex-shrink-0 bg-brand text-on-brand text-[12px] font-black px-3 py-1.5 rounded-full">答える</span>}
           </span>
         </button>
+      );
+    }
+
+    // 📋 「回答を待っている質問」の一覧ページ（全画面。←で戻る）
+    //   ・詳細はボトムシートで上に重ねる（ページは残るので、閉じると同じ位置に戻る）
+    //   ・絞り込み：回答0件だけ／カテゴリ／自分の質問
+    function WaitingPage({ questions, unreadLabelByPost, onOpen, onBack }) {
+      useScrollLock();
+      const [zeroOnly, setZeroOnly] = useState(false);
+      const [mineOnly, setMineOnly] = useState(false);
+      const [cat, setCat] = useState("");
+      const list = questions.filter(p => (!zeroOnly || p.commentsCount === 0) && (!mineOnly || isMineName(p.author)) && (!cat || p.category === cat));
+      const cats = CATEGORIES.filter(c => questions.some(p => p.category === c));
+      const chip = (on) => cx("px-3 py-1.5 rounded-full text-[12.5px] font-bold whitespace-nowrap flex-shrink-0 flex items-center gap-1 press border", on ? "bg-brand text-on-brand border-brand" : "bg-surface text-sub border-line");
+      return (
+        <div className="fixed inset-0 z-[45] bg-bg flex flex-col animate-push-in" role="dialog" aria-label="回答を待っている質問">
+          <div className="w-full max-w-md mx-auto flex-1 flex flex-col min-h-0">
+            <header className="px-2 pb-2 flex items-center gap-1 border-b border-line/70 bg-bg" style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}>
+              <button onClick={onBack} aria-label="戻る" className="w-11 h-11 rounded-full flex items-center justify-center text-ink press"><Icon n="arrow_back_ios_new" size={22} /></button>
+              <div className="min-w-0">
+                <h2 className="font-head font-black text-[17px] leading-tight">回答を待っている質問</h2>
+                <p className="text-[11.5px] text-mute">回答0件が先・新しい順／解決済みは除く</p>
+              </div>
+            </header>
+            <div className="px-4 pt-3 pb-2 space-y-2">
+              <div className="flex gap-2 overflow-x-auto scrollbar-none">
+                <button onClick={() => setZeroOnly(!zeroOnly)} aria-pressed={zeroOnly} className={chip(zeroOnly)}><Icon n="hourglass_empty" size={15} />回答0件だけ</button>
+                <button onClick={() => setMineOnly(!mineOnly)} aria-pressed={mineOnly} className={chip(mineOnly)}><Icon n="person" size={15} />自分の質問</button>
+              </div>
+              <div className="flex gap-2 overflow-x-auto scrollbar-none">
+                <button onClick={() => setCat("")} aria-pressed={cat === ""} className={chip(cat === "")}>すべて</button>
+                {cats.map(c => (
+                  <button key={c} onClick={() => setCat(cat === c ? "" : c)} aria-pressed={cat === c} className={chip(cat === c)}><Icon n={catMeta(c).icon} fill={cat === c} size={15} />{catMeta(c).short}</button>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pt-1 space-y-3" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
+              <p className="text-[12px] text-sub px-1">{list.length}件</p>
+              {list.length === 0 ? (
+                <div className="text-center py-10 space-y-3">
+                  <p className="text-[13px] text-mute">条件に合う質問はありません</p>
+                  {(zeroOnly || mineOnly || cat) && <button onClick={() => { setZeroOnly(false); setMineOnly(false); setCat(""); }} className={cx(BTN_SOFT, "px-5")}>絞り込みを解除</button>}
+                </div>
+              ) : list.map(p => (
+                <QuestionCard key={p.id} wide post={p} unreadLabel={unreadLabelByPost[p.id]} onOpen={() => onOpen(p)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ≡ メニュー（全画面。右から開き、×で閉じる）
+    const NOTIF_PREF_ITEMS = [
+      { key: "answer", label: "自分の質問への回答", sub: "ベストアンサーの選択も含む" },
+      { key: "thanks", label: "「助かった！」が付いたとき", sub: "自分の記事・回答" },
+      { key: "comment", label: "自分の記事へのコメント" },
+      { key: "watch", label: "「気になる」した質問の更新" },
+      { key: "ai", label: "AIからのひとこと" }
+    ];
+    const DOC_PAGES = {
+      guide: { title: "ガイドライン", body: [
+        ["お互いを思いやる", "同じ大学の仲間どうしの場です。やさしい言葉づかいを心がけましょう。"],
+        ["個人を特定しない", "名前・顔写真・連絡先など、個人が特定できる情報は書かないでください。"],
+        ["悪口・名指しの評価はNG", "特定の人や団体を傷つける投稿は削除の対象です。"],
+        ["宣伝・勧誘はNG", "許可のない広告・勧誘・営業は投稿できません。"],
+        ["体調のことは専門家へ", "回答は参考情報です。つらいときは医療機関や保健センターに相談してください。"],
+        ["困ったら通報", "不適切な投稿・回答は「通報」から知らせてください。"]
+      ] },
+      faq: { title: "よくある質問", body: [
+        ["ポイントはどうやって貯まる？", "記事の投稿で+10pt、質問への回答で+3pt、「助かった！」を押すと+1ptです。"],
+        ["チケットはどう使う？", "お店のレジで「お店で使う」を押し、レジのQRを読み取ってスライドします。完了画面を店員さんに見せてください。"],
+        ["名前は表示される？", "表示されるのは学部・学年だけです。投稿や回答は匿名にもできます。"],
+        ["ベストアンサーとは？", "質問した人が、いちばん納得できた回答を1つ選ぶしくみです。選ぶと質問は解決済みになります。"],
+        ["ほかの大学の人は見られる？", "見られません。大学のメールアドレスで確認した学生だけが使えます。"]
+      ] },
+      terms: { title: "利用規約", body: [["準備中", "正式な利用規約は準備中です（デモ版）。"]] },
+      privacy: { title: "プライバシーポリシー", body: [["準備中", "正式なプライバシーポリシーは準備中です（デモ版）。"]] }
+    };
+    function Toggle({ on, onChange, label }) {
+      return (
+        <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
+          className={cx("w-12 h-7 rounded-full p-0.5 transition-colors flex-shrink-0", on ? "bg-brand" : "bg-line")}>
+          <span className={cx("block w-6 h-6 rounded-full bg-white shadow-soft transition-transform", on ? "translate-x-5" : "")}></span>
+        </button>
+      );
+    }
+    function MenuRow({ icon, label, sub, onClick, href, danger, right }) {
+      const inner = (
+        <>
+          <Icon n={icon} size={21} className={danger ? "text-danger" : "text-sub"} />
+          <span className="flex-1 min-w-0">
+            <span className={cx("block text-[14px] font-bold", danger ? "text-danger-ink" : "text-ink")}>{label}</span>
+            {sub && <span className="block text-[11.5px] text-mute truncate">{sub}</span>}
+          </span>
+          {right || <Icon n={href ? "open_in_new" : "chevron_right"} size={18} className="text-mute" />}
+        </>
+      );
+      const cls = "w-full text-left flex items-center gap-3 px-4 py-3.5 press";
+      return href
+        ? <a href={href} target="_blank" rel="noopener" className={cls}>{inner}</a>
+        : <button type="button" onClick={onClick} className={cls}>{inner}</button>;
+    }
+    function MenuGroup({ title, children }) {
+      return (
+        <section className="space-y-1.5">
+          {title && <h3 className="text-[12px] font-bold text-sub px-1">{title}</h3>}
+          <div className="bg-surface rounded-3xl border border-line/70 shadow-soft divide-y divide-line/70 overflow-hidden">{children}</div>
+        </section>
+      );
+    }
+    function MenuPage({ me, plan, notifPrefs, setNotifPrefs, onClose, onPremium, onLogout, showToast }) {
+      useScrollLock();
+      const [sub, setSub] = useState(null);   // null | "notif" | "guide" | "faq" | "terms" | "privacy" | "contact"
+      const [contactKind, setContactKind] = useState("サービスについて");
+      const [contactBody, setContactBody] = useState("");
+      const bodyRef = useRef(null);
+      useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = 0; }, [sub]);
+      const titles = { notif: "通知設定", contact: "お問い合わせ" };
+      const title = sub ? (titles[sub] || DOC_PAGES[sub].title) : "メニュー";
+      return (
+        <div className="fixed inset-0 z-[45] bg-bg flex flex-col animate-push-in" role="dialog" aria-label={title}>
+          <div className="w-full max-w-md mx-auto flex-1 flex flex-col min-h-0">
+            <header className="px-2 pb-2 flex items-center gap-1 border-b border-line/70" style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}>
+              {sub
+                ? <button onClick={() => setSub(null)} aria-label="メニューに戻る" className="w-11 h-11 rounded-full flex items-center justify-center press"><Icon n="arrow_back_ios_new" size={22} /></button>
+                : <span className="w-11"></span>}
+              <h2 className="flex-1 text-center font-head font-black text-[17px]">{title}</h2>
+              <button onClick={onClose} aria-label="メニューを閉じる" className="w-11 h-11 rounded-full flex items-center justify-center press"><Icon n="close" size={24} /></button>
+            </header>
+
+            <div ref={bodyRef} className="flex-1 overflow-y-auto px-4 pt-4 space-y-5" style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}>
+              {!sub && (<>
+                {/* ログイン中の人＋プラン */}
+                <div className="bg-surface rounded-3xl border border-line/70 shadow-soft p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={me.label} size={52} />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-head font-black text-[16px] leading-tight">{me.faculty} {me.grade}年</p>
+                      <p className="text-[12px] text-sub flex items-center gap-1"><Icon n="verified" fill size={14} className="text-brand-deep" />{me.univ}・大学メール認証済み</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 bg-sunk rounded-2xl px-3.5 py-2.5">
+                    <span className="text-[13px]">
+                      <span className="text-sub">プラン：</span>
+                      <b className={plan === "free" ? "text-ink" : "text-brand-deep"}>{plan === "free" ? "フリー" : "プレミアム（無料体験中）"}</b>
+                    </span>
+                    <button onClick={onPremium} className="text-[12px] font-black text-brand-deep flex items-center press">{plan === "free" ? "ほしい機能を投票" : "内容を見る"}<Icon n="chevron_right" size={16} /></button>
+                  </div>
+                </div>
+
+                <MenuGroup title="設定">
+                  <MenuRow icon="notifications" label="通知設定" sub={`${NOTIF_PREF_ITEMS.filter(i => notifPrefs[i.key] !== false).length}/${NOTIF_PREF_ITEMS.length} 項目がオン`} onClick={() => setSub("notif")} />
+                  <MenuRow icon="workspace_premium" label="プレミアム（準備中）" sub="ほしい機能を教えてください" onClick={onPremium} />
+                </MenuGroup>
+
+                <MenuGroup title={`${me.univ}の公式情報`}>
+                  {(me.sns || []).map(s => <MenuRow key={s.url} icon={s.icon} label={`公式 ${s.label}`} sub={s.handle} href={s.url} />)}
+                  {me.website && <MenuRow icon="language" label="公式Webサイト" sub={me.website.replace(/^https?:\/\//, "").replace(/\/$/, "")} href={me.website} />}
+                </MenuGroup>
+
+                <MenuGroup title="サポート">
+                  <MenuRow icon="help" label="よくある質問" onClick={() => setSub("faq")} />
+                  <MenuRow icon="mail" label="お問い合わせ" onClick={() => setSub("contact")} />
+                  <MenuRow icon="rule" label="ガイドライン" onClick={() => setSub("guide")} />
+                </MenuGroup>
+
+                <MenuGroup title="規約">
+                  <MenuRow icon="description" label="利用規約" onClick={() => setSub("terms")} />
+                  <MenuRow icon="shield_person" label="プライバシーポリシー" onClick={() => setSub("privacy")} />
+                </MenuGroup>
+
+                <MenuGroup>
+                  <MenuRow icon="logout" label="ログアウト" danger right={<span></span>} onClick={onLogout} />
+                </MenuGroup>
+                <p className="text-center text-[11px] text-mute">TUNAGARI デモ版</p>
+              </>)}
+
+              {sub === "notif" && (
+                <MenuGroup title="お知らせを受け取る">
+                  {NOTIF_PREF_ITEMS.map(i => (
+                    <div key={i.key} className="flex items-center gap-3 px-4 py-3.5">
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[14px] font-bold">{i.label}</span>
+                        {i.sub && <span className="block text-[11.5px] text-mute">{i.sub}</span>}
+                      </span>
+                      <Toggle on={notifPrefs[i.key] !== false} label={i.label} onChange={(v) => setNotifPrefs({ ...notifPrefs, [i.key]: v })} />
+                    </div>
+                  ))}
+                </MenuGroup>
+              )}
+
+              {DOC_PAGES[sub] && (
+                <div className="space-y-3">
+                  {DOC_PAGES[sub].body.map(([q, a]) => (
+                    <div key={q} className="bg-surface rounded-3xl border border-line/70 p-4 space-y-1">
+                      <p className="font-head font-black text-[15px]">{sub === "faq" ? `Q. ${q}` : q}</p>
+                      <p className="text-[13.5px] text-sub leading-relaxed">{a}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {sub === "contact" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className={LABEL} htmlFor="contact-kind">お問い合わせの種類</label>
+                    <select id="contact-kind" value={contactKind} onChange={(e) => setContactKind(e.target.value)} className={cx(INPUT, "font-bold")}>
+                      {["サービスについて", "不具合の報告", "ポイント・チケット", "協力店について", "その他"].map(k => <option key={k}>{k}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="contact-body">内容</label>
+                    <textarea id="contact-body" rows="6" value={contactBody} onChange={(e) => setContactBody(e.target.value)} placeholder="できるだけ具体的に書いてください" className={cx(INPUT, "leading-relaxed")} />
+                  </div>
+                  <button disabled={!contactBody.trim()} onClick={() => { showToast("お問い合わせを送信しました（デモ：実際には送信されません）"); setContactBody(""); setSub(null); }} className={cx(BTN_PRIMARY, "w-full")}>送信する</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // 🧭 自己分析レポート（キャンパスタイプ診断）
+    //   ・投稿・回答・「助かった！」・活動ログから、端末内でタイプと強みを計算（デモ）
+    //   ・本番では、同じ形（タイプ・強み・1年前→今・次の一歩）でAIに返してもらう想定
+    // ============================================================
+    const CAMPUS_TYPES = {
+      share:   { name: "情報ナビゲーター", icon: "explore", strength: "情報共有力", catch: "見つけた情報を、みんなの道しるべに。", tags: ["共有上手", "情報通", "面倒見がいい"],
+                 before: "ひとりで調べて、ひとりで乗り切っていた", after: "見つけた情報を、まわりに返せるようになった" },
+      help:    { name: "頼れるサポーター", icon: "volunteer_activism", strength: "サポート力", catch: "困っている人を見つけると、つい手を差しのべる。", tags: ["聞き上手", "やさしい", "経験値高め"],
+                 before: "自分のことで手いっぱいだった", after: "経験を言葉にして、誰かの力になれるようになった" },
+      curious: { name: "探究ラーナー", icon: "psychology_alt", strength: "探究心", catch: "「なんで？」を放っておかない。", tags: ["好奇心", "質問力", "コツコツ"],
+                 before: "わからないことをそのままにしがちだった", after: "わからないことを、人に聞いて解決できるようになった" },
+      plan:    { name: "戦略プランナー", icon: "event_note", strength: "計画力", catch: "先を読んで、ムダなく進む。", tags: ["段取り上手", "効率重視", "準備派"],
+                 before: "テスト直前にあわてるタイプだった", after: "早めに情報を集めて、計画的に動けるようになった" },
+      explore: { name: "キャンパス探検家", icon: "hiking", strength: "行動力", catch: "まず行ってみる。そこから全部が始まる。", tags: ["フットワーク", "発見上手", "好奇心"],
+                 before: "決まった場所を行き来するだけだった", after: "キャンパスの新しい場所や人に出会えるようになった" }
+    };
+    const NEXT_STEPS = {
+      share:   [{ icon: "forum", title: "回答待ちの質問に答える", desc: "あなたの情報が、そのまま誰かの答えに。", action: "waiting" }, { icon: "document_scanner", title: "掲示板を撮って共有する", desc: "撮るだけで記事になります。", action: "post" }],
+      help:    [{ icon: "forum", title: "回答0件の質問をのぞく", desc: "最初のひとことが、いちばん喜ばれます。", action: "waiting" }, { icon: "edit_note", title: "経験を記事にまとめる", desc: "同じ悩みの後輩が見つけてくれます。", action: "post" }],
+      curious: [{ icon: "help", title: "気になることを質問する", desc: "状況を書くと、答えてもらいやすくなります。", action: "ask" }, { icon: "menu_book", title: "学んだことを記録する", desc: "1年後の自分への贈りものに。", action: "log" }],
+      plan:    [{ icon: "menu_book", title: "今週の予定を記録する", desc: "振り返りがラクになります。", action: "log" }, { icon: "edit_note", title: "テスト対策をシェアする", desc: "あなたの段取りは、誰かの近道です。", action: "post" }],
+      explore: [{ icon: "confirmation_number", title: "札幌駅周辺のお店に行く", desc: "ポイントで使えるチケットがあります。", action: "ticket" }, { icon: "photo_camera", title: "見つけた場所を記事にする", desc: "写真つきだと、ぐっと読まれます。", action: "post" }]
+    };
+    function buildAnalysis(posts, logs) {
+      const mine = (n) => typeof n === "string" && n.includes("あなた");
+      const myPosts = posts.filter(p => mine(p.author));
+      const infos = myPosts.filter(p => p.type !== "question");
+      const questions = myPosts.filter(p => p.type === "question");
+      const myComments = posts.flatMap(p => p.comments.filter(c => mine(c.user)).map(c => ({ ...c, isAnswer: p.type === "question", isBA: p.bestAnswerId === c.id })));
+      const answers = myComments.filter(c => c.isAnswer);
+      const thanksOnPosts = infos.reduce((a, p) => a + (p.thanks || 0), 0);
+      const thanksOnAnswers = myComments.reduce((a, c) => a + (c.thanks || 0), 0);
+      const logCat = (k) => logs.filter(l => (l.category || "").includes(k)).length;
+      const raw = {
+        share: infos.length * 10 + thanksOnPosts * 0.5,
+        help: answers.length * 12 + thanksOnAnswers * 3 + answers.filter(c => c.isBA).length * 10,
+        curious: questions.length * 10 + logCat("学習") * 8,
+        plan: (logCat("履修") + logCat("学習")) * 12,
+        explore: (logCat("キャンパス") + logCat("サークル")) * 14 + logs.filter(l => l.image).length * 4
+      };
+      const max = Math.max(1, ...Object.values(raw));
+      const score = (k) => Math.round(45 + 50 * raw[k] / max);
+      const order = Object.keys(raw).sort((a, b) => raw[b] - raw[a]);
+      const evidence = {
+        share: `記事${infos.length}件・「助かった！」${thanksOnPosts}回`,
+        help: `回答${answers.length}件・「助かった！」${thanksOnAnswers}回`,
+        curious: `質問${questions.length}件・学習ログ${logCat("学習")}件`,
+        plan: `履修・学習の記録${logCat("履修") + logCat("学習")}件`,
+        explore: `キャンパスの記録${logCat("キャンパス") + logCat("サークル")}件`
+      };
+      const typeKey = order[0];
+      return {
+        typeKey, type: CAMPUS_TYPES[typeKey],
+        stats: [
+          { label: "書いた記事", value: infos.length, unit: "件", icon: "edit_note" },
+          { label: "答えた質問", value: answers.length, unit: "件", icon: "forum" },
+          { label: "もらった「助かった！」", value: thanksOnPosts + thanksOnAnswers, unit: "回", icon: "favorite" },
+          { label: "記録した活動", value: logs.length, unit: "件", icon: "menu_book" }
+        ],
+        strengths: order.slice(0, 3).map(k => ({ key: k, label: CAMPUS_TYPES[k].strength, score: score(k), evidence: evidence[k], icon: CAMPUS_TYPES[k].icon })),
+        next: NEXT_STEPS[typeKey]
+      };
+    }
+    function CountUp({ to, ms = 900 }) {
+      const [v, setV] = useState(0);
+      useEffect(() => {
+        let raf, t0;
+        const step = (t) => { if (!t0) t0 = t; const r = Math.min(1, (t - t0) / ms); setV(Math.round(to * (1 - Math.pow(1 - r, 3)))); if (r < 1) raf = requestAnimationFrame(step); };
+        raf = requestAnimationFrame(step);
+        return () => cancelAnimationFrame(raf);
+      }, [to]);
+      return <>{v}</>;
+    }
+    function AnalysisReport({ data, loading, onClose, onAction }) {
+      useScrollLock();
+      const [i, setI] = useState(0);
+      const [stepText, setStepText] = useState(0);
+      const LOAD_STEPS = ["活動ログを読み込み中…", "投稿と回答をふりかえり中…", "あなたの強みを分析中…", "タイプを判定中…"];
+      useEffect(() => { if (!loading) return; const t = setInterval(() => setStepText(s => (s + 1) % LOAD_STEPS.length), 450); return () => clearInterval(t); }, [loading]);
+      const N = 5;
+      const go = (d) => setI(x => Math.max(0, Math.min(N - 1, x + d)));
+      const T = data && data.type;
+      return (
+        <div className="fixed inset-0 z-[65] text-white flex flex-col animate-fade-in" role="dialog" aria-label="自己分析レポート"
+          style={{ background: "radial-gradient(120% 80% at 20% 0%, #4fd1ae 0%, #35b597 35%, #1c8068 75%, #145a4a 100%)" }}>
+          <div className="w-full max-w-md mx-auto flex-1 flex flex-col px-5 min-h-0" style={{ paddingTop: "max(0.9rem, env(safe-area-inset-top))", paddingBottom: "max(1.2rem, env(safe-area-inset-bottom))" }}>
+            {/* 進み具合（ストーリー風） */}
+            <div className="flex gap-1.5">
+              {Array.from({ length: N }).map((_, k) => <span key={k} className={cx("h-1 flex-1 rounded-full", !loading && k <= i ? "bg-white" : "bg-white/30")}></span>)}
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-[12px] font-bold text-white/80 flex items-center gap-1"><Icon n="auto_awesome" fill size={15} />自己分析レポート</span>
+              <button onClick={onClose} aria-label="閉じる" className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center press"><Icon n="close" size={22} /></button>
+            </div>
+
+            {loading || !data ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-5 text-center">
+                <span className="w-24 h-24 rounded-full bg-white/15 flex items-center justify-center animate-floaty"><Icon n="psychology" fill size={52} /></span>
+                <p className="font-head font-black text-[18px]">{LOAD_STEPS[stepText]}</p>
+                <div className="w-40 h-1.5 rounded-full bg-white/20 overflow-hidden"><div className="h-full w-1/3 bg-white rounded-full live-sweep"></div></div>
+              </div>
+            ) : (
+              <div className="flex-1 relative min-h-0 flex flex-col">
+                {/* 左右タップで前後に */}
+                <button aria-label="前へ" onClick={() => go(-1)} className="absolute left-0 top-0 bottom-24 w-1/3 z-0"></button>
+                <button aria-label="次へ" onClick={() => go(1)} className="absolute right-0 top-0 bottom-24 w-2/3 z-0"></button>
+
+                <div key={i} className="flex-1 flex flex-col justify-center gap-6 relative pointer-events-none">
+                  {i === 0 && (<>
+                    <p className="text-center text-[15px] font-bold text-white/85 animate-reveal">あなたのキャンパスタイプは…</p>
+                    <div className="flex flex-col items-center gap-4 animate-reveal" style={{ animationDelay: "450ms" }}>
+                      <span className="w-32 h-32 rounded-[2.2rem] bg-white text-brand-deep flex items-center justify-center shadow-lift animate-floaty rotate-[-4deg]"><Icon n={T.icon} fill size={72} /></span>
+                      <h2 className="font-head font-black text-[34px] leading-tight text-center">{T.name}</h2>
+                      <p className="text-[16px] font-bold text-white/90 text-center">{T.catch}</p>
+                      <div className="flex flex-wrap justify-center gap-2">{T.tags.map(t => <span key={t} className="bg-white/18 border border-white/30 text-[12.5px] font-bold px-3 py-1 rounded-full" style={{ background: "rgb(255 255 255 / .16)" }}>#{t}</span>)}</div>
+                    </div>
+                  </>)}
+
+                  {i === 1 && (<>
+                    <h2 className="font-head font-black text-[24px] text-center animate-reveal">数字でふりかえる</h2>
+                    <div className="grid grid-cols-2 gap-3">
+                      {data.stats.map((s, k) => (
+                        <div key={s.label} className="bg-white text-ink rounded-3xl p-4 shadow-lift animate-reveal" style={{ animationDelay: `${150 + k * 120}ms` }}>
+                          <Icon n={s.icon} fill size={22} className="text-brand" />
+                          <p className="font-head font-black text-[36px] leading-none mt-2 tabular-nums"><CountUp to={s.value} /><span className="text-[14px] text-sub ml-0.5">{s.unit}</span></p>
+                          <p className="text-[12px] text-sub font-bold mt-1">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>)}
+
+                  {i === 2 && (<>
+                    <h2 className="font-head font-black text-[24px] text-center animate-reveal">あなたの強み TOP3</h2>
+                    <div className="space-y-3">
+                      {data.strengths.map((s, k) => (
+                        <div key={s.key} className="bg-white text-ink rounded-3xl p-4 shadow-lift animate-reveal" style={{ animationDelay: `${150 + k * 160}ms` }}>
+                          <div className="flex items-center gap-3">
+                            <span className={cx("w-9 h-9 rounded-full flex items-center justify-center font-head font-black text-[16px] flex-shrink-0", k === 0 ? "bg-brand text-white" : "bg-brand-tint text-brand-deep")}>{k + 1}</span>
+                            <span className="flex-1 min-w-0">
+                              <span className="flex justify-between items-baseline"><b className="font-head text-[17px]">{s.label}</b><b className="font-head text-[20px] text-brand-deep tabular-nums"><CountUp to={s.score} /></b></span>
+                              <span className="block text-[11.5px] text-sub">{s.evidence}</span>
+                            </span>
+                          </div>
+                          <div className="h-2 rounded-full bg-sunk mt-2.5 overflow-hidden"><div className="h-full rounded-full bg-brand animate-grow" style={{ width: `${s.score}%`, animationDelay: `${300 + k * 160}ms` }}></div></div>
+                        </div>
+                      ))}
+                    </div>
+                  </>)}
+
+                  {i === 3 && (<>
+                    <h2 className="font-head font-black text-[24px] text-center animate-reveal">1年前のあなた → 今のあなた</h2>
+                    <div className="space-y-3">
+                      <div className="rounded-3xl p-4 border border-white/40 animate-reveal" style={{ background: "rgb(255 255 255 / .12)", animationDelay: "150ms" }}>
+                        <p className="text-[12px] font-bold text-white/75">1年前</p>
+                        <p className="font-head font-black text-[18px] leading-snug mt-1">{T.before}</p>
+                      </div>
+                      <div className="flex justify-center animate-reveal" style={{ animationDelay: "450ms" }}><Icon n="south" size={34} /></div>
+                      <div className="bg-white text-ink rounded-3xl p-4 shadow-lift animate-reveal" style={{ animationDelay: "700ms" }}>
+                        <p className="text-[12px] font-bold text-brand-deep">今</p>
+                        <p className="font-head font-black text-[18px] leading-snug mt-1">{T.after}</p>
+                      </div>
+                    </div>
+                  </>)}
+
+                  {i === 4 && (<>
+                    <h2 className="font-head font-black text-[24px] text-center animate-reveal">次の一歩</h2>
+                    <div className="space-y-3 pointer-events-auto">
+                      {data.next.map((n, k) => (
+                        <button key={n.title} onClick={() => onAction(n.action)} className="w-full text-left bg-white text-ink rounded-3xl p-4 shadow-lift flex items-center gap-3 press animate-reveal" style={{ animationDelay: `${150 + k * 150}ms` }}>
+                          <span className="w-11 h-11 rounded-2xl bg-brand-tint text-brand-deep flex items-center justify-center flex-shrink-0"><Icon n={n.icon} fill size={24} /></span>
+                          <span className="flex-1 min-w-0"><b className="block text-[15px]">{n.title}</b><span className="block text-[12px] text-sub">{n.desc}</span></span>
+                          <Icon n="chevron_right" size={20} className="text-mute" />
+                        </button>
+                      ))}
+                    </div>
+                  </>)}
+                </div>
+
+                <div className="relative z-10 flex gap-2 pt-4">
+                  {i > 0 && <button onClick={() => go(-1)} className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center press" aria-label="前のページ"><Icon n="arrow_back" size={22} /></button>}
+                  {i < N - 1
+                    ? <button onClick={() => go(1)} className="flex-1 h-14 rounded-2xl bg-white text-brand-deep font-black text-[16px] press">次へ</button>
+                    : <button onClick={() => setI(0)} className="flex-1 h-14 rounded-2xl bg-white text-brand-deep font-black text-[16px] press">もう一度見る</button>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // 🗳 プレミアム：ほしい機能の投票（複数選択可）
+    // ============================================================
+    const PREMIUM_FEATURES = [
+      { group: "学び", items: [
+        { id: "kakomon", icon: "auto_stories", title: "過去問・解説ノート 見放題", desc: "全授業の過去問と、先輩の解説ノートを閲覧・保存" },
+        { id: "ai_search", icon: "bolt", title: "AI要約検索 使い放題", desc: "質問すると、関連する投稿をAIが要約して即回答" },
+        { id: "test_pack", icon: "inventory_2", title: "授業別テスト対策まとめ", desc: "出題傾向・過去問・ノートを授業ごとに1ページに" },
+        { id: "risyu", icon: "calendar_month", title: "履修プランナー", desc: "時間割と卒業に必要な単位を自動でチェック" },
+        { id: "report_ai", icon: "rate_review", title: "レポート・ESのAI添削", desc: "構成や言い回しをAIがアドバイス" }
+      ] },
+      { group: "情報・つながり", items: [
+        { id: "kyuko_push", icon: "notifications_active", title: "休講・補講の即時通知", desc: "登録した授業の休講情報をすぐにお知らせ" },
+        { id: "priority_q", icon: "trending_up", title: "質問の優先表示", desc: "自分の質問を上位に出して、回答を集めやすく" },
+        { id: "shimei", icon: "person_search", title: "学部・学年を指定して質問", desc: "聞きたい人にピンポイントで質問できる" }
+      ] },
+      { group: "おトク", items: [
+        { id: "ticket_plus", icon: "confirmation_number", title: "限定チケット・割引アップ", desc: "協力店のプレミアム限定チケットが使える" },
+        { id: "bonus_pt", icon: "redeem", title: "毎月ボーナスポイント", desc: "毎月ポイントをプレゼント" },
+        { id: "pt_double", icon: "stars", title: "ポイント2倍", desc: "記事・回答でもらえるポイントが2倍" }
+      ] },
+      { group: "進路・キャリア", items: [
+        { id: "zemi", icon: "groups", title: "ゼミ・研究室の口コミ詳細", desc: "指導スタイル・忙しさ・卒業後の進路まで" },
+        { id: "job_early", icon: "work", title: "バイト・インターン先行公開", desc: "学生向けの募集を、一般公開より先にチェック" },
+        { id: "shukatsu", icon: "badge", title: "就活体験記 見放題", desc: "先輩のES・面接・内定までの体験記" }
+      ] },
+      { group: "快適・自分らしさ", items: [
+        { id: "no_ads", icon: "block", title: "広告なし", desc: "広告を表示せず、すっきり使える" },
+        { id: "analysis_plus", icon: "insights", title: "自己分析レポート 詳細版", desc: "毎月の成長レポートと、タイプ診断の詳しい解説" },
+        { id: "storage", icon: "cloud_upload", title: "ノート保存 無制限", desc: "写真やPDFのノートを容量を気にせず保存" },
+        { id: "badge", icon: "verified", title: "プレミアムバッジ・着せ替え", desc: "プロフィールのバッジと、アプリの色テーマ" }
+      ] }
+    ];
+    const PREMIUM_PRICES = ["払わない", "300円", "500円", "800円", "1,000円以上"];
+    const ALL_PREMIUM = PREMIUM_FEATURES.flatMap(g => g.items);
+    const _isTestVote = new URLSearchParams(window.location.search).has("test");
+
+    function PremiumVote({ vote, setVote, clientId, profile, showToast, onBack }) {
+      const [sel, setSel] = useState(() => vote ? vote.features : []);
+      const [price, setPrice] = useState(() => vote ? vote.price : "");
+      const [comment, setComment] = useState(() => vote ? vote.comment : "");
+      const [editing, setEditing] = useState(!vote);
+      const [sending, setSending] = useState(false);
+      const [summary, setSummary] = useState(null);
+      const toggle = (id) => setSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+      const loadSummary = () => {
+        if (!VOTE_ENDPOINT) return;
+        fetch(VOTE_ENDPOINT).then(r => r.json()).then(setSummary).catch(() => {});
+      };
+      useEffect(() => { if (vote) loadSummary(); }, []);
+      const submit = async () => {
+        if (!sel.length) return;
+        setSending(true);
+        const data = { clientId, univ: profile.univ, faculty: profile.faculty, grade: profile.grade, features: sel, price, comment: comment.trim(), test: _isTestVote, at: new Date().toISOString() };
+        if (VOTE_ENDPOINT) {
+          try {
+            // Google Apps Script へ送信（text/plain にして、ブラウザの事前確認なしで送れるようにする）
+            await fetch(VOTE_ENDPOINT, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(data) });
+          } catch (e) { showToast("送信できませんでした。通信環境を確かめて、もう一度お試しください"); setSending(false); return; }
+        }
+        setVote({ features: sel, price, comment: comment.trim(), at: Date.now() });
+        setSending(false);
+        setEditing(false);
+        showToast(VOTE_ENDPOINT ? "回答を送りました。ありがとうございます！" : "回答を保存しました（デモ：集計先が未設定のため、この端末だけに保存）");
+        setTimeout(loadSummary, 1200);
+      };
+      const total = summary && summary.total;
+      return (
+        <div className="space-y-4 w-full animate-fade-up">
+          <button onClick={onBack} className="flex items-center gap-0.5 text-[13px] font-bold text-sub press"><Icon n="arrow_back_ios_new" size={16} />メニューに戻る</button>
+          <div className="rounded-[2rem] p-5 text-white space-y-2 shadow-soft" style={{ background: "linear-gradient(135deg, #35b597, #1c8068)" }}>
+            <span className="inline-flex items-center gap-1 text-[12px] font-black tracking-wider bg-white/20 px-2.5 py-0.5 rounded-full"><Icon n="workspace_premium" fill size={15} />PREMIUM・準備中</span>
+            <h2 className="font-head font-black text-[22px] leading-snug">あったらうれしい機能を<br />教えてください</h2>
+            <p className="text-[13px] text-white/90">いくつでも選べます。いちばん声の多いものから作ります。</p>
+          </div>
+
+          {!editing && vote ? (
+            <div className="space-y-4">
+              <div className="bg-surface rounded-3xl border border-line/70 shadow-soft p-4 space-y-2">
+                <p className="font-head font-black text-[16px] flex items-center gap-1.5"><Icon n="check_circle" fill size={22} className="text-brand" />回答ありがとうございます</p>
+                <p className="text-[12.5px] text-sub">あなたが選んだ {vote.features.length} 件{vote.price ? `・月額 ${vote.price}` : ""}</p>
+                <div className="flex flex-wrap gap-1.5">{vote.features.map(id => { const f = ALL_PREMIUM.find(x => x.id === id); return f ? <span key={id} className="bg-brand-tint text-brand-deep text-[12px] font-bold px-2.5 py-1 rounded-full">{f.title}</span> : null; })}</div>
+                <button onClick={() => setEditing(true)} className="text-[12.5px] font-bold text-brand-deep press">回答を修正する</button>
+              </div>
+              {total ? (
+                <div className="bg-surface rounded-3xl border border-line/70 shadow-soft p-4 space-y-3">
+                  <p className="font-head font-black text-[16px]">みんなの回答（{total}人）</p>
+                  {ALL_PREMIUM.map(f => ({ f, n: (summary.features || {})[f.id] || 0 })).sort((a, b) => b.n - a.n).map(({ f, n }) => (
+                    <div key={f.id} className="space-y-1">
+                      <div className="flex justify-between text-[12.5px]"><span className={cx("font-bold", vote.features.includes(f.id) && "text-brand-deep")}>{f.title}</span><span className="text-sub tabular-nums">{Math.round(n / total * 100)}%</span></div>
+                      <div className="h-2 rounded-full bg-sunk overflow-hidden"><div className="h-full rounded-full bg-brand" style={{ width: `${Math.max(2, n / total * 100)}%` }}></div></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[12px] text-mute text-center">{VOTE_ENDPOINT ? "みんなの回答を読み込み中…" : "デモ：集計先を設定すると、ここにみんなの回答が表示されます"}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {PREMIUM_FEATURES.map(g => (
+                <section key={g.group} className="space-y-2">
+                  <h3 className="text-[12px] font-bold text-sub px-1">{g.group}</h3>
+                  <div className="space-y-2">
+                    {g.items.map(f => {
+                      const on = sel.includes(f.id);
+                      return (
+                        <button key={f.id} type="button" onClick={() => toggle(f.id)} aria-pressed={on}
+                          className={cx("w-full text-left rounded-2xl p-3.5 flex items-center gap-3 border-2 press transition-colors", on ? "border-brand bg-brand-tint" : "border-line/70 bg-surface")}>
+                          <span className={cx("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0", on ? "bg-brand text-white" : "bg-sunk text-brand-deep")}><Icon n={f.icon} fill size={22} /></span>
+                          <span className="flex-1 min-w-0"><b className="block text-[14px] leading-snug">{f.title}</b><span className="block text-[11.5px] text-sub leading-snug">{f.desc}</span></span>
+                          <span className={cx("w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0", on ? "bg-brand border-brand text-white" : "border-line")}>{on && <Icon n="check" size={18} />}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+
+              <section className="space-y-2">
+                <h3 className="text-[12px] font-bold text-sub px-1">月額いくらまでなら払ってもいい？（任意）</h3>
+                <div className="flex flex-wrap gap-2">
+                  {PREMIUM_PRICES.map(p => (
+                    <button key={p} type="button" onClick={() => setPrice(price === p ? "" : p)} aria-pressed={price === p}
+                      className={cx("px-3.5 py-2 rounded-full text-[13px] font-bold border press", price === p ? "bg-brand text-on-brand border-brand" : "bg-surface text-sub border-line")}>{p}</button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-2">
+                <label className="text-[12px] font-bold text-sub px-1 block" htmlFor="premium-comment">ほかにほしい機能（任意）</label>
+                <textarea id="premium-comment" rows="3" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="例：サークルの新歓情報をまとめて見たい" className={cx(INPUT, "leading-relaxed")} />
+              </section>
+
+              <div className="sticky bottom-24 z-10">
+                <button onClick={submit} disabled={!sel.length || sending} className={cx(BTN_PRIMARY, "w-full py-4 text-[15px] shadow-lift")}>
+                  {sending ? "送信中…" : sel.length ? `${sel.length}件を選んで送信する` : "ほしい機能を選んでください"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       );
     }
 
@@ -1620,7 +2294,7 @@
           </button>
           {open && (
             <div className="space-y-3 animate-fade-in">
-              <p className="text-[14px] leading-relaxed text-ink">{ai.intro}</p>
+              <p className="text-[14px] leading-relaxed text-ink">{String(ai.intro || "").replace("先輩の回答", "みんなの回答")}</p>
               <ul className="space-y-2">
                 {ai.tips.map((t, i) => (
                   <li key={i} className="flex gap-2.5 items-start bg-surface rounded-2xl p-3">
@@ -1630,7 +2304,7 @@
                 ))}
               </ul>
               {ai.outro && <p className="text-[13px] leading-relaxed text-ink">{ai.outro}</p>}
-              <p className="text-[12px] text-mute">※ AIの回答です。先輩の回答が届いたらそちらを優先してね</p>
+              <p className="text-[12px] text-mute">※ AIの回答です。学生の回答が届いたらそちらを優先してね</p>
             </div>
           )}
         </div>
@@ -1758,10 +2432,18 @@
     function App() {
       const [currentTab, setCurrentTab] = useState(0);
       const feedLayout = "home";   // フィードはA案（セクション型）に決定
-      const [posts, setPosts] = usePersistentState("posts_v2", () => makeInitialPosts(U));
+      const [posts, setPosts] = usePersistentState("posts_v3", () => makeInitialPosts(U));
       const [userThanks, setUserThanks] = usePersistentState("userThanks", () => 143);
       const [notices, setNotices] = usePersistentState("notices_v2", () => makeInitialNotices(U));
       const [openNotices, setOpenNotices] = useState(false);
+      const [openMenu, setOpenMenu] = useState(false);
+      const [confirmLogout, setConfirmLogout] = useState(false);
+      const [plan, setPlan] = usePersistentState("plan", () => "free");          // "free" | "trial"（デモ）
+      const [premiumVote, setPremiumVote] = usePersistentState("premiumVote", () => null);
+      const [voteClientId] = usePersistentState("voteClientId", () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
+      const [notifPrefs, setNotifPrefs] = usePersistentState("notifPrefs", () => ({ answer: true, thanks: true, comment: true, watch: true, ai: true }));
+      const notifPrefsRef = useRef(notifPrefs);
+      notifPrefsRef.current = notifPrefs;
       const postsRef = useRef(posts);
       postsRef.current = posts;
       const watchTimers = useRef({});
@@ -1812,7 +2494,30 @@
       const [fRecent, setFRecent] = useState(false);
       const [searchHistory, setSearchHistory] = usePersistentState("searchHistory", () => []);
       const [searchSheet, setSearchSheet] = useState(null); // null | "sort" | "filter"
-      const [openCompose, setOpenCompose] = useState(false); // 投稿の入口（質問する／情報を投稿する）
+      const [openCompose, setOpenCompose] = useState(false);
+      const [boardTab, setBoardTab] = useState("info");          // みんなの投稿：記事 or 質問
+      const [openWaitingList, setOpenWaitingList] = useState(false);   // 回答を待っている質問の一覧（全画面ページ）
+      const openMenuPage = () => {
+        try { window.history.pushState({ tngPage: "menu" }, ""); } catch (e) {}
+        setOpenMenu(true);
+      };
+      const closeMenu = () => {
+        if (window.history.state && window.history.state.tngPage === "menu") window.history.back();
+        else setOpenMenu(false);
+      };
+      const openWaitingListPage = () => {
+        try { window.history.pushState({ tngPage: "waiting" }, ""); } catch (e) {}
+        setOpenWaitingList(true);
+      };
+      const closeWaitingList = () => {
+        if (window.history.state && window.history.state.tngPage === "waiting") window.history.back();
+        else setOpenWaitingList(false);
+      };
+      useEffect(() => {
+        const onPop = () => { setSelectedPostId(null); setOpenWaitingList(false); setOpenMenu(false); };
+        window.addEventListener("popstate", onPop);
+        return () => window.removeEventListener("popstate", onPop);
+      }, []); // 投稿の入口（質問する／情報を投稿する）
       const [isSearchFocused, setIsSearchFocused] = useState(false);
 
       const [selectedPostId, setSelectedPostId] = useState(null);
@@ -1896,6 +2601,7 @@
 
       const [isOcrProcessing, setIsOcrProcessing] = useState(false);
       const [ocrTags, setOcrTags] = useState([]);
+      const [newTags, setNewTags] = useState([]);
 
       const [floatingHearts, setFloatingHearts] = useState([]);
       const [toastMessage, setToastMessage] = useState(null);
@@ -1908,12 +2614,14 @@
       // 🔔 お知らせ（自分の質問への回答／「気になる」を押した質問の更新）
       const pushNotice = (post, kind, preview, mineOverride) => {
         const mine = mineOverride !== undefined ? mineOverride : isMineName(post.author);
+        const prefKey = kind === "ai" ? "ai" : kind.startsWith("thanks") ? "thanks" : kind === "comment" ? "comment" : mine ? "answer" : "watch";
+        if (notifPrefsRef.current && notifPrefsRef.current[prefKey] === false) return;   // 通知設定でオフ
         const n = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, postId: post.id, kind, mine, title: shortQuestionTitle(post.title), preview: preview || "", at: Date.now(), read: false };
         setNotices(prev => [n, ...prev].slice(0, 30));
         if (kind !== "ai" && kind !== "answer") { showToast(`🔔 ${noticeLabel(n)}`); return; }
         showToast(kind === "ai" ? "💌 AIサポーターからメッセージが届きました（お知らせを見る →右上の🔔）" : "🔔 新しい回答が届きました（右上の🔔から見られます）");
       };
-      // デモ：「気になる」を押した質問に、先輩の回答が届いたことにする
+      // デモ：「気になる」を押した質問に、ほかの学生の回答が届いたことにする
       const deliverWatchedAnswer = (postId) => {
         const cur = postsRef.current.find(p => p.id === postId);
         if (!cur || !cur.isLiked) return;
@@ -1983,6 +2691,7 @@
             setNewTitle(`【${U.building}】今週の休講・補講通知一覧メモ`);
             setNewContent(`${U.building}1階ロビーの掲示板より自動読み取り：\n・【解析力学Ⅱ】8/22(金) 3限 補講（301教室）\n・【量子力学Ⅰ】8/21(木) 休講（振替講義なし）`);
             setOcrTags(["#休講・掲示板", `#${U.building}`, "#自動OCR"]);
+            setNewTags(["休講", "掲示板"]);
             showToast("✨ AI解析が完了しました！テキスト・タグが自動入力されました。");
           }, 800);
         };
@@ -1992,6 +2701,21 @@
         } else {
           applyOcrResults("https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=600&auto=format&fit=crop&q=60");
         }
+      };
+
+      // 写真を添付するだけ（文字の読み取りはしない）
+      const handleAttachPhoto = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) readAndDownscale(file, 800, (src) => setNewImage(src));
+        e.target.value = "";
+      };
+      // 撮って投稿：写真から文字を読み取り、記事の下書きを作る
+      const startScanPost = (e) => {
+        setNewType("info");
+        setOpenCompose(false);
+        setOpenNewPostModal(true);
+        handleImageSelect(e);
+        e.target.value = "";
       };
 
       const handleExchangePoint = (item) => {
@@ -2063,57 +2787,23 @@
         showToast("📖 活動ログを記録しました！");
       };
 
-      const handleRunAiAnalysis = async () => {
+      // 🧭 自己分析（デモ：端末内で計算。本番はAIに同じ形で返してもらう想定）
+      const handleRunAiAnalysis = () => {
+        setAiAnalysisResult(null);
         setIsAnalyzing(true);
         setOpenAiAnalysisModal(true);
-
-        const logsText = myLogs.map(l => `[${l.date}] ${l.category} - ${l.title}: ${l.note}`).join("\n");
-        const prompt = `あなたは大学生の行動ログから自己分析を行うAIキャリアカウンセラーです。
-以下の学生の【キャンパス活動ログ】を元に、客観的な自己分析を行ってください。
-
-【活動ログ一覧】
-${logsText}
-
-以下の3つの項目で丁寧かつポジティブに要約・解説してください。
-1. 「過去のあなたの思考・行動傾向」（1年前・過去のログから見えてくる人物像）
-2. 「ログから発見できるあなたの強み」（客観的な長所・得意なこと）
-3. 「これからの行動へのワンポイントヒント」（今後伸ばせそうな領域）`;
-
-        try {
-          const apiKey = "";
-          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-          
-          const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }]
-            })
-          });
-
-          const result = await response.json();
-          const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-          if (text) {
-            setAiAnalysisResult(text);
-          } else {
-            throw new Error("No response text");
-          }
-        } catch (error) {
-          setAiAnalysisResult(`### 🧠 あなたのキャンパス行動・傾向分析
-
-#### 1. 過去のあなたの思考・行動傾向
-過去のログを振り返ると、あなたは**「目標達成に向けて直前に集中的に過去問やリソースを集めて攻略する」**という高い集中力と効率重視の傾向が見られます。1年前のあなたは課題を個人の努力で乗り越えようとする職人タイプでした。
-
-#### 2. 発見されたあなたの隠れた強み
-* **徹底的な情報収集力**：過去問や空き教室などの有用情報を自ら足で探す行動力があります。
-* **知見の構造化と共有力**：得た気づきをメモに落とし込み、周囲に還元できる「ギバー（与える人）」の資質を持っています。
-
-#### 3. これからの行動へのアドバイス
-個人での情報蓄積だけでなく、学内のグループやプロジェクトで「情報提供役・ナビゲーター」として動くことで、周囲から頼られるリーダーシップが自然と身についていきます！`);
-        } finally {
+        setTimeout(() => {
+          setAiAnalysisResult(buildAnalysis(postsRef.current, myLogs));
           setIsAnalyzing(false);
-        }
+        }, 1900);
+      };
+      const handleAnalysisAction = (a) => {
+        setOpenAiAnalysisModal(false);
+        if (a === "waiting") { setCurrentTab(0); openWaitingListPage(); }
+        else if (a === "post") openPost();
+        else if (a === "ask") openAsk("");
+        else if (a === "log") setOpenLogModal(true);
+        else if (a === "ticket") { setActiveTabPointModal("exchange"); setOpenPointExchangeModal(true); }
       };
 
       const toggleLogPrivacy = (logId) => {
@@ -2281,6 +2971,7 @@ ${logsText}
           time: "たった今",
           isLiked: false,
           image: newImage,
+          tags: Array.from(new Set([...newTags, ...hashtagsInText(`${postTitle} ${postContent}`)])).slice(0, 5),
           comments: []
         };
 
@@ -2291,6 +2982,7 @@ ${logsText}
         setNewContent("");
         setNewImage(null);
         setOcrTags([]);
+        setNewTags([]);
         setOpenNewPostModal(false);
         setCurrentTab(0);
         setSearchQuery("");
@@ -2300,7 +2992,7 @@ ${logsText}
           showToast("🙋 質問を投稿しました！回答が付くとここに表示されます");
         } else {
           setUserThanks(t => t + POINT_RULES.share);
-          showToast(`🎉 情報を共有しました（+${POINT_RULES.share}pt）`);
+          showToast(`🎉 記事を投稿しました（+${POINT_RULES.share}pt）`);
         }
       };
 
@@ -2334,7 +3026,7 @@ ${logsText}
         const filtered = posts.filter(post => {
           if (reportedIds.includes(`p:${post.id}`)) return false;
 
-          const hay = norm(`${post.title} ${post.content} ${post.category}`);
+          const hay = norm(`${post.title} ${post.content} ${post.category} ${extractTags(post).join(" ")}`);
           const matchesQuery = searchTokens.every(t => expandToken(t).some(w => hay.includes(w)));
 
           const matchesTag = selectedTag === "" || post.category === selectedTag;
@@ -2412,7 +3104,7 @@ ${logsText}
       };
       const activeFilterList = [
         onlyQuestions && { key: "q", label: "質問", clear: () => setOnlyQuestions(false) },
-        onlyInfo && { key: "i", label: "情報", clear: () => setOnlyInfo(false) },
+        onlyInfo && { key: "i", label: "記事", clear: () => setOnlyInfo(false) },
         answerFilter === "none" && { key: "n", label: "回答なし", clear: () => setAnswerFilter("all") },
         answerFilter === "has" && { key: "h", label: "回答あり", clear: () => setAnswerFilter("all") },
         fImage && { key: "p", label: "写真あり", clear: () => setFImage(false) },
@@ -2439,10 +3131,10 @@ ${logsText}
         return <GateScreen U={U} onEnter={() => setVerified(true)} />;
       }
 
-      const waitingQuestions = posts
-        .filter(p => p.type === "question" && !p.bestAnswerId)
-        .sort((a, b) => ((a.commentsCount === 0 ? 0 : 1) - (b.commentsCount === 0 ? 0 : 1)) || (ageMinutes(a) - ageMinutes(b)))
-        .slice(0, 6);
+      const allWaitingQuestions = posts
+        .filter(p => p.type === "question" && !p.bestAnswerId && !reportedIds.includes(`p:${p.id}`))
+        .sort((a, b) => ((a.commentsCount === 0 ? 0 : 1) - (b.commentsCount === 0 ? 0 : 1)) || (ageMinutes(a) - ageMinutes(b)));
+      const waitingQuestions = allWaitingQuestions.slice(0, 6);
 
       const isQuestion = !!selectedPost && selectedPost.type === "question";
       const sortedComments = selectedPost
@@ -2469,21 +3161,18 @@ ${logsText}
 
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button
-                  onClick={() => setOpenNotices(true)}
-                  aria-label={unreadTotal > 0 ? `お知らせ（未読${unreadTotal}件）` : "お知らせ"}
-                  className="relative w-10 h-10 rounded-full bg-surface border border-line/70 shadow-soft flex items-center justify-center press"
-                >
-                  <Icon n="notifications" fill={unreadTotal > 0} size={22} className={unreadTotal > 0 ? "text-brand-deep" : "text-sub"} />
-                  {unreadTotal > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-love text-white text-[10px] font-black flex items-center justify-center ring-2 ring-bg">{unreadTotal}</span>
-                  )}
-                </button>
-                <button
                   onClick={() => setOpenPointExchangeModal(true)}
                   className="bg-surface border border-line/70 text-ink rounded-full pl-2.5 pr-3 py-2 flex items-center gap-1 font-black text-[13px] press"
                 >
                   <Icon n="stars" fill size={18} className="text-brand" />
                   <span>{userThanks} pt</span>
+                </button>
+                <button
+                  onClick={openMenuPage}
+                  aria-label="メニュー"
+                  className="w-10 h-10 rounded-full bg-surface border border-line/70 shadow-soft flex items-center justify-center press"
+                >
+                  <Icon n="menu" size={22} className="text-ink" />
                 </button>
               </div>
             </div>
@@ -2722,7 +3411,7 @@ ${logsText}
                             topPick={idx === 0 && sortKey === "recommended"}
                             tokens={searchTokens}
                             unread={unreadByPost[post.id] || 0} unreadLabel={unreadLabelByPost[post.id]}
-                            onOpen={() => setSelectedPost(post)}
+                            onTag={(t) => { setCurrentTab(0); runSearch(`#${t}`); }} onOpen={() => setSelectedPost(post)}
                             onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }}
                           />
                         ))}
@@ -2740,7 +3429,7 @@ ${logsText}
                             ・該当がなければ、この枠ごと隠す */}
                         {waitingQuestions.length > 0 && (
                         <section className="space-y-2.5">
-                          <SectionHead title="回答を待っている質問" action="すべて見る" onAction={() => setOnlyQuestions(true)} />
+                          <SectionHead title="回答を待っている質問" action={allWaitingQuestions.length > waitingQuestions.length ? `すべて見る（${allWaitingQuestions.length}）` : "一覧で見る"} onAction={openWaitingListPage} />
                           <ScrollRow className="flex gap-3 overflow-x-auto pb-2 scrollbar-none -mx-4 px-4">
                             {waitingQuestions.map(p => (
                               <QuestionCard key={p.id} post={p} unreadLabel={unreadLabelByPost[p.id]} onOpen={() => setSelectedPost(p)} />
@@ -2769,10 +3458,21 @@ ${logsText}
 
                         {/* みんなの投稿（2列ボード） */}
                         <section className="space-y-2.5">
-                          <SectionHead title="みんなの投稿" />
+                          <div className="flex items-center justify-between gap-2 px-1">
+                            <h2 className="font-head font-black text-[17px]">みんなの投稿</h2>
+                            <div className="flex bg-sunk rounded-full p-1" role="tablist" aria-label="投稿の種類">
+                              {[["info", "記事", "edit_note"], ["question", "質問", "help"]].map(([v, l, ic]) => (
+                                <button key={v} role="tab" aria-selected={boardTab === v} onClick={() => setBoardTab(v)}
+                                  className={cx("px-3.5 py-1.5 rounded-full text-[13px] font-bold flex items-center gap-1 press", boardTab === v ? "bg-surface text-ink shadow-soft font-black" : "text-mute")}>
+                                  <Icon n={ic} fill={boardTab === v} size={16} />{l}
+                                  <span className={cx("text-[11px]", boardTab === v ? "text-brand-deep" : "text-mute")}>{filteredPosts.filter(p => (v === "question") === (p.type === "question")).length}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <div className="columns-2 gap-3">
-                            {filteredPosts.map((post, idx) => (
-                              <BoardCard key={post.id} post={post} idx={idx} unread={unreadByPost[post.id] || 0} unreadLabel={unreadLabelByPost[post.id]} onOpen={() => setSelectedPost(post)} onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }} />
+                            {filteredPosts.filter(p => (boardTab === "question") === (p.type === "question")).map((post, idx) => (
+                              <BoardCard key={post.id} post={post} idx={idx} unread={unreadByPost[post.id] || 0} unreadLabel={unreadLabelByPost[post.id]} onTag={(t) => { setCurrentTab(0); runSearch(`#${t}`); }} onOpen={() => setSelectedPost(post)} onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }} />
                             ))}
                           </div>
                         </section>
@@ -3062,7 +3762,7 @@ ${logsText}
                           post={post}
                           idx={idx}
                           unread={unreadByPost[post.id] || 0} unreadLabel={unreadLabelByPost[post.id]}
-                          onOpen={() => setSelectedPost(post)}
+                          onTag={(t) => { setCurrentTab(0); runSearch(`#${t}`); }} onOpen={() => setSelectedPost(post)}
                           onThanks={(e) => { e.stopPropagation(); handleThanks(e, post.id); }}
                         />
                       ))}
@@ -3077,7 +3777,7 @@ ${logsText}
                       className="w-full bg-surface border border-line/70 text-brand-deep font-black py-3.5 rounded-2xl text-[14px] shadow-soft flex items-center justify-center gap-1.5 press"
                     >
                       <Icon n="auto_awesome" fill size={20} />
-                      <span>AIで自分の強みを見つける</span>
+                      <span>自己分析レポートを見る</span>
                     </button>
 
                     <div className="flex justify-between items-center px-1">
@@ -3127,47 +3827,16 @@ ${logsText}
               </div>
             )}
 
-            {/* TAB 3: プレミアム */}
+            {/* TAB 3: プレミアム（準備中：ほしい機能の投票） */}
             {currentTab === 3 && (
-              <div className="space-y-4 w-full animate-fade-up">
-                <div className="bg-surface p-5 rounded-[2rem] shadow-soft border border-line/70 text-center space-y-5">
-                  <div className="space-y-2">
-                    <span className="inline-flex items-center gap-1 text-brand-deep text-[12px] font-black tracking-wider">
-                      <Icon n="workspace_premium" fill size={16} />PREMIUM
-                    </span>
-                    <h2 className="font-head font-black text-[24px] leading-tight">テスト前が、ラクになる。</h2>
-                  </div>
-
-                  <div className="flex items-baseline justify-center gap-1">
-                    <span className="font-head text-[40px] leading-none font-black text-ink">¥500</span>
-                    <span className="text-[13px] text-sub font-bold">/月</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-left">
-                    {[
-                      { icon: "auto_stories", title: "過去問 見放題" },
-                      { icon: "bolt", title: "AI要約 使い放題" },
-                      { icon: "block", title: "広告なし" },
-                      { icon: "verified", title: "優先表示" }
-                    ].map(f => (
-                      <div key={f.icon} className="bg-sunk p-3 rounded-2xl flex items-center gap-2">
-                        <Icon n={f.icon} fill size={22} className="text-brand flex-shrink-0" />
-                        <span className="font-bold text-[13px] leading-snug">{f.title}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => showToast("無料体験（7日間）へ進みます（デモ）")}
-                      className={cx(BTN_PRIMARY, "w-full py-4 text-[15px]")}
-                    >
-                      7日間 無料で試す
-                    </button>
-                    <p className="text-[12px] text-mute">いつでも解約OK・無料期間中は¥0</p>
-                  </div>
-                </div>
-              </div>
+              <PremiumVote
+                vote={premiumVote}
+                setVote={setPremiumVote}
+                clientId={voteClientId}
+                profile={{ univ: U.name, faculty: U.faculty, grade: userGrade }}
+                showToast={showToast}
+                onBack={() => { setCurrentTab(0); openMenuPage(); }}
+              />
             )}
 
           </main>
@@ -3179,10 +3848,10 @@ ${logsText}
           >
             {[
               { tab: 0, icon: "home", label: "フィード" },
-              { tab: 1, icon: "photo_camera", label: "パシャ投稿" },
+              { action: "tickets", icon: "confirmation_number", label: "チケット" },
               { center: true },
-              { tab: 2, icon: "person", label: "マイページ" },
-              { tab: 3, icon: "workspace_premium", label: "プレミアム" }
+              { action: "notices", icon: "notifications", label: "お知らせ" },
+              { tab: 2, icon: "person", label: "マイページ" }
             ].map(item => item.center ? (
               <div key="center" className="w-[72px] flex-shrink-0 self-stretch relative">
                 <button
@@ -3197,15 +3866,24 @@ ${logsText}
               </div>
             ) : (
               <button
-                key={item.tab}
-                onClick={() => { if (currentTab === item.tab) window.scrollTo({ top: 0, behavior: "smooth" }); else setCurrentTab(item.tab); }}
+                key={item.tab ?? item.action}
+                onClick={() => {
+                  if (item.action === "tickets") { setActiveTabPointModal("exchange"); setOpenPointExchangeModal(true); return; }
+                  if (item.action === "notices") { setOpenNotices(true); return; }
+                  if (currentTab === item.tab) window.scrollTo({ top: 0, behavior: "smooth" }); else setCurrentTab(item.tab);
+                }}
                 aria-current={currentTab === item.tab ? "page" : undefined}
                 className={cx(
                   "flex flex-col items-center gap-0.5 py-1.5 px-1.5 rounded-full min-w-[58px] press",
                   currentTab === item.tab ? "text-brand-deep font-black" : "text-mute font-bold"
                 )}
               >
-                <Icon n={item.icon} fill={currentTab === item.tab} size={24} />
+                <span className="relative">
+                  <Icon n={item.icon} fill={currentTab === item.tab || (item.action === "notices" && unreadTotal > 0)} size={24} className={item.action === "notices" && unreadTotal > 0 ? "text-brand-deep" : ""} />
+                  {item.action === "notices" && unreadTotal > 0 && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-love text-white text-[10px] font-black flex items-center justify-center ring-2 ring-surface">{unreadTotal}</span>
+                  )}
+                </span>
                 <span className="text-[10.5px] leading-none whitespace-nowrap">{item.label}</span>
               </button>
             ))}
@@ -3269,9 +3947,9 @@ ${logsText}
                 <h2 className="font-head font-black text-[20px] leading-snug">{selectedPost.title.replace(/^【質問】\s*/, "")}</h2>
                 <p className="text-[14px] text-sub leading-relaxed break-words whitespace-pre-wrap">{selectedPost.content}</p>
                 {extractTags(selectedPost).length > 0 && (
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                  <div className="flex flex-wrap gap-1.5 mt-2">
                     {extractTags(selectedPost).map(t => (
-                      <button key={t} onClick={() => { setCurrentTab(0); runSearch(`#${t}`); }} className="text-[13px] font-bold text-brand-deep press">#{t}</button>
+                      <button key={t} onClick={() => { setCurrentTab(0); runSearch(`#${t}`); }} className="bg-brand-tint text-brand-deep text-[12.5px] font-bold px-2.5 py-1 rounded-full press">#{t}</button>
                     ))}
                   </div>
                 )}
@@ -3510,7 +4188,7 @@ ${logsText}
           {openNewPostModal && (
             <Sheet onClose={() => setOpenNewPostModal(false)}>
               <SheetHeader
-                title={newType === "question" ? "みんなに質問する" : "キャンパス情報を新規投稿"}
+                title={newType === "question" ? "みんなに質問する" : "記事を投稿する"}
                 onClose={() => setOpenNewPostModal(false)}
               />
 
@@ -3520,7 +4198,7 @@ ${logsText}
                   onChange={setNewType}
                   options={[
                     { value: "question", label: "質問する", icon: "help" },
-                    { value: "info", label: "情報を共有する", icon: "lightbulb" }
+                    { value: "info", label: "記事を書く", icon: "edit_note" }
                   ]}
                 />
 
@@ -3545,20 +4223,34 @@ ${logsText}
                 </div>
 
                 <div>
-                  <label className={LABEL}>{newType === "question" ? "くわしい状況（任意）" : "本文・詳細情報"}</label>
+                  <div className="flex items-baseline justify-between">
+                    <label className={LABEL} htmlFor="post-body">{newType === "question" ? "くわしい状況（任意）" : "本文"}</label>
+                    {newType === "question" && !newContent && (
+                      <button type="button" onClick={() => setNewContent("・今の状況：\n・困っていること：\n・知りたいこと：")} className="text-[12px] font-bold text-brand-deep press">型を入れる</button>
+                    )}
+                  </div>
                   <textarea
-                    rows="3"
-                    placeholder={newType === "question" ? "状況を書くと答えてもらいやすいです" : "伝えたいこと"}
+                    id="post-body"
+                    rows={newType === "question" ? 5 : 4}
+                    placeholder={newType === "question" ? (DETAIL_PLACEHOLDER[newCategory] || DETAIL_PLACEHOLDER["その他"]) : "例）いつ・どこで・何があったか、役に立つポイントを書こう\n本文に「#過去問」のように書くと、タグにもなります"}
                     value={newContent}
                     onChange={(e) => setNewContent(e.target.value)}
                     className={cx(INPUT, "leading-relaxed")}
                   />
+                  {newType === "question" && <p className="text-[11.5px] text-mute mt-1">「状況・困っていること・知りたいこと」があると、答えてもらいやすくなります</p>}
                 </div>
 
+                <TagInput tags={newTags} setTags={setNewTags} suggestions={Array.from(new Set([...(CATEGORY_TAG_HINTS[newCategory] || []), ...popularTags]))} bodyTags={hashtagsInText(`${newTitle} ${newContent}`)} />
+
                 <div>
-                  <label className={LABEL}>📷 写真を添付（任意）</label>
-                  <input type="file" id="new-post-photo-input" accept="image/*" onChange={handleImageSelect} className="hidden" />
-                  {newImage ? (
+                  <label className={LABEL}>写真（任意）</label>
+                  <input type="file" id="new-post-photo-input" accept="image/*" onChange={handleAttachPhoto} className="hidden" />
+                  {isOcrProcessing ? (
+                    <div className="bg-sunk rounded-3xl p-5 text-center space-y-2">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-brand border-t-transparent"></div>
+                      <p className="font-black text-[13px] text-brand-deep">写真の文字を読み取り中…</p>
+                    </div>
+                  ) : newImage ? (
                     <div className="relative rounded-3xl overflow-hidden max-h-40 bg-sunk">
                       <img src={newImage} alt="投稿写真" className="w-full h-full object-cover" />
                       <button
@@ -3570,13 +4262,18 @@ ${logsText}
                       </button>
                     </div>
                   ) : (
-                    <label
-                      htmlFor="new-post-photo-input"
-                      className="border-2 border-dashed border-line rounded-3xl p-4 bg-sunk/60 flex items-center justify-center gap-2 cursor-pointer text-sub press"
-                    >
-                      <Icon n="add_a_photo" size={22} />
-                      <span className="text-[13px] font-bold">写真を選択またはカメラ撮影</span>
-                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label htmlFor="new-post-photo-input" className="border-2 border-dashed border-line rounded-2xl p-3 bg-sunk/60 flex flex-col items-center justify-center gap-1 cursor-pointer text-sub press">
+                        <Icon n="add_a_photo" size={22} />
+                        <span className="text-[12.5px] font-bold">写真を添付</span>
+                      </label>
+                      {newType === "info" && (
+                        <label htmlFor="scan-post-input" className="border-2 border-dashed border-brand/50 rounded-2xl p-3 bg-brand-tint/60 flex flex-col items-center justify-center gap-1 cursor-pointer text-brand-deep press">
+                          <Icon n="document_scanner" size={22} />
+                          <span className="text-[12.5px] font-bold">撮って文字を読み取る</span>
+                        </label>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -3775,44 +4472,9 @@ ${logsText}
             </div>
           )}
 
-          {/* 🤖 AI自己分析モーダル */}
+          {/* 🧭 自己分析レポート（ストーリー形式） */}
           {openAiAnalysisModal && (
-            <Dialog onClose={() => setOpenAiAnalysisModal(false)}>
-              <div className="p-5 space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-2xl bg-sky-tint text-sky-ink flex items-center justify-center">
-                      <Icon n="psychology" fill size={22} />
-                    </div>
-                    <h3 className="font-head font-black text-[16px]">AI活動ログ自己分析レポート</h3>
-                  </div>
-                  <button onClick={() => setOpenAiAnalysisModal(false)} aria-label="閉じる" className="w-9 h-9 rounded-full bg-sunk text-sub flex items-center justify-center press">
-                    <Icon n="close" size={20} />
-                  </button>
-                </div>
-
-                {isAnalyzing ? (
-                  <div className="py-10 text-center space-y-3">
-                    <div className="inline-block animate-spin rounded-full h-9 w-9 border-4 border-sky border-t-transparent"></div>
-                    <p className="text-[13px] font-bold text-sky-ink animate-pulse">
-                      あなたの蓄積ログを読み込んで自己分析を生成中...
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 text-[13px] leading-relaxed">
-                    <div className="bg-sky-tint p-4 rounded-3xl whitespace-pre-wrap text-ink">
-                      {aiAnalysisResult}
-                    </div>
-                    <button
-                      onClick={() => setOpenAiAnalysisModal(false)}
-                      className={cx(BTN_PRIMARY, "w-full")}
-                    >
-                      閉じる
-                    </button>
-                  </div>
-                )}
-              </div>
-            </Dialog>
+            <AnalysisReport data={aiAnalysisResult} loading={isAnalyzing} onClose={() => setOpenAiAnalysisModal(false)} onAction={handleAnalysisAction} />
           )}
 
           {/* 🚩 通報ボトムシート */}
@@ -3859,6 +4521,8 @@ ${logsText}
           )}
 
           {/* ☕ ポイント交換＆電子チケットボトムシート */}
+          <input type="file" id="scan-post-input" accept="image/*" onChange={startScanPost} className="hidden" />
+
           {openCompose && (
             <Sheet onClose={() => setOpenCompose(false)}>
               <SheetHeader title="投稿する" icon="add_circle" onClose={() => setOpenCompose(false)} />
@@ -3870,12 +4534,19 @@ ${logsText}
                   </span>
                 </button>
                 <button onClick={() => { setOpenCompose(false); openPost(); }} className="w-full text-left bg-brand-tint rounded-3xl p-4 flex items-center gap-3.5 press">
-                  <span className="w-12 h-12 rounded-2xl bg-brand text-on-brand flex items-center justify-center flex-shrink-0"><Icon n="lightbulb" fill size={28} /></span>
+                  <span className="w-12 h-12 rounded-2xl bg-brand text-on-brand flex items-center justify-center flex-shrink-0"><Icon n="edit_note" fill size={28} /></span>
                   <span>
-                    <span className="block font-head font-black text-[17px] text-brand-deep leading-tight">情報を投稿する</span>
-                    <span className="block text-[12px] text-brand-deep leading-snug mt-0.5">+{POINT_RULES.share}pt</span>
+                    <span className="block font-head font-black text-[17px] text-brand-deep leading-tight">記事を投稿する</span>
+                    <span className="block text-[12px] text-brand-deep leading-snug mt-0.5">知っていることを共有 +{POINT_RULES.share}pt</span>
                   </span>
                 </button>
+                <label htmlFor="scan-post-input" className="w-full text-left bg-sunk rounded-3xl p-4 flex items-center gap-3.5 cursor-pointer press">
+                  <span className="w-12 h-12 rounded-2xl bg-surface text-brand-deep flex items-center justify-center flex-shrink-0"><Icon n="document_scanner" fill size={28} /></span>
+                  <span>
+                    <span className="block font-head font-black text-[17px] text-ink leading-tight">撮って投稿する</span>
+                    <span className="block text-[12px] text-sub leading-snug mt-0.5">掲示板やノートの文字を読み取って記事に +{POINT_RULES.share}pt</span>
+                  </span>
+                </label>
               </div>
             </Sheet>
           )}
@@ -3907,7 +4578,7 @@ ${logsText}
                 {[
                   { title: "種類", items: [
                     { key: "q", label: "質問", on: onlyQuestions, toggle: () => { setOnlyInfo(false); setOnlyQuestions(!onlyQuestions); } },
-                    { key: "i", label: "情報", on: onlyInfo, toggle: () => { setOnlyQuestions(false); setOnlyInfo(!onlyInfo); } }
+                    { key: "i", label: "記事", on: onlyInfo, toggle: () => { setOnlyQuestions(false); setOnlyInfo(!onlyInfo); } }
                   ] },
                   { title: "回答", items: [
                     { key: "n", label: "回答なし", on: answerFilter === "none", toggle: () => setAnswerFilter(answerFilter === "none" ? "all" : "none") },
@@ -3996,7 +4667,7 @@ ${logsText}
               </div>
 
               <div className="mx-5 -mt-1 mb-3 flex justify-between text-[11px] text-sub">
-                {[["edit_note", "情報を投稿", POINT_RULES.share], ["forum", "質問に回答", POINT_RULES.answer], ["favorite", "助かった！", POINT_RULES.thanks]].map(([ic, l, n]) => (
+                {[["edit_note", "記事を投稿", POINT_RULES.share], ["forum", "質問に回答", POINT_RULES.answer], ["favorite", "助かった！", POINT_RULES.thanks]].map(([ic, l, n]) => (
                   <span key={l} className="flex items-center gap-1"><Icon n={ic} size={14} className="text-brand-deep" />{l}<b className="text-ink">+{n}</b></span>
                 ))}
               </div>
@@ -4160,6 +4831,43 @@ ${logsText}
                 </div>
               </div>
             </Sheet>
+          )}
+
+          {/* ≡ メニュー */}
+          {openMenu && (
+            <MenuPage
+              me={{ label: myLabel, faculty: U.faculty, grade: userGrade, univ: U.name, website: U.website, sns: U.sns }}
+              plan={plan}
+              notifPrefs={notifPrefs}
+              setNotifPrefs={setNotifPrefs}
+              showToast={showToast}
+              onClose={closeMenu}
+              onPremium={() => { setOpenMenu(false); try { if (window.history.state && window.history.state.tngPage === "menu") window.history.replaceState(null, ""); } catch (e) {} setCurrentTab(3); }}
+              onLogout={() => setConfirmLogout(true)}
+            />
+          )}
+          {confirmLogout && (
+            <Dialog onClose={() => setConfirmLogout(false)} z={60}>
+              <div className="p-5 space-y-4 text-center">
+                <Icon n="logout" size={34} className="text-danger" />
+                <h3 className="font-head font-black text-[17px]">ログアウトしますか？</h3>
+                <p className="text-[13px] text-sub">投稿やポイントは消えません。次回は大学のメールアドレスで入り直します。</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setConfirmLogout(false)} className={cx(BTN_SOFT, "flex-1")}>やめる</button>
+                  <button onClick={() => { setConfirmLogout(false); setOpenMenu(false); setVerified(false); setCurrentTab(0); }} className="flex-1 bg-danger text-white font-black rounded-2xl py-3 text-[14px] press">ログアウト</button>
+                </div>
+              </div>
+            </Dialog>
+          )}
+
+          {/* 📋 回答を待っている質問の一覧（全画面ページ。端末の「戻る」でも閉じる） */}
+          {openWaitingList && (
+            <WaitingPage
+              questions={allWaitingQuestions}
+              unreadLabelByPost={unreadLabelByPost}
+              onOpen={(p) => setSelectedPost(p)}
+              onBack={closeWaitingList}
+            />
           )}
 
           {/* 🏅 ベストアンサーの確認（選び直しはできない） */}
