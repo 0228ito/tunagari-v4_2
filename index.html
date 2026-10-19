@@ -298,7 +298,7 @@
     // 🗳 プレミアム機能の投票の送り先（Google Apps Script の WebアプリURL を貼る）
     //   ・空のままだと、投票はこの端末にだけ保存されます（集計されません）
     //   ・URL末尾に ?test=1 を付けて開くと「テスト」として記録されます（チーム内の確認用）
-    const VOTE_ENDPOINT = "https://docs.google.com/spreadsheets/d/16Fm745CTlXKEs1iokFCr9faRri4cOz6hzvW_Jd6O99w/edit?usp=sharing";
+    const VOTE_ENDPOINT = "https://script.google.com/macros/s/AKfycbx3CHzzRPSaUZ3L9G2I1rt4tTx9MjZhp6bnhPsR3MwRWDS57kNCKXLIQVEfF5mQITXq4w/exec";
 
     function usePersistentState(key, initialFactory) {
       const [value, setValue] = useState(() => {
