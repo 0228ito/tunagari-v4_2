@@ -258,7 +258,8 @@
       hokudai: {
         name: "北海道大学",          // 正式名称
         short: "北大",               // 略称（「北大生」「北大認証済」などに使用）
-        faculty: "経済学部",         // マイページ表示用の学部名
+        faculty: "経済学部",         // マイページ表示用の学部名（＝この学生が登録している学部）
+        faculties: ["総合教育部（1年）", "文学部", "教育学部", "法学部", "経済学部", "理学部", "医学部", "歯学部", "薬学部", "工学部", "農学部", "獣医学部", "水産学部"],
         facultyShort: "経済",        // 投稿者表示用（例：経済3年）
         facultyBuilding: "経済学部2号館",
         building: "理学部2号館",     // 休講掲示板のサンプル用
@@ -274,6 +275,7 @@
         name: "小樽商科大学",
         short: "小樽商大",
         faculty: "商学部",
+        faculties: ["商学部"],
         facultyShort: "商",
         facultyBuilding: "講義棟",
         building: "講義棟",
@@ -287,6 +289,15 @@
     const _univParam = new URLSearchParams(window.location.search).get("univ");
     const UNIV_ID = (_univParam && UNIVERSITIES[_univParam]) ? _univParam : ACTIVE_UNIVERSITY;
     const U = UNIVERSITIES[UNIV_ID];
+
+    // 🎓 学部向けの投稿と「学部の新着まとめ」
+    //   ・投稿時に「どの学部向けか」を選ぶ（全学部向け／〇〇学部向け）
+    //   ・授業・休講・研究室のカテゴリは、投稿者の学部が初期値（ほかは全学部向け）
+    //   ・自分の学部向けの新着は、1日1回（18時ごろ）まとめてお知らせに届く
+    const FACULTY_DEFAULT_CATEGORIES = ["授業・過去問", "休講・掲示板", "バイト・研究室"];
+    const DIGEST_HOUR = 18;
+    const SAMPLE_FACULTY_POST_IDS = [1, 4, 8, 9];   // サンプル投稿のうち、学部向けのもの
+    const facultyOf = (p) => p.targetFaculty || (SAMPLE_FACULTY_POST_IDS.includes(p.id) ? U.faculty : "all");
     document.title = `キャンパスリアルポータル｜${U.name}`;
 
     // ============================================================
@@ -1129,9 +1140,13 @@
       thanks_post:   { icon: "favorite",         mineLabel: "あなたの投稿に「助かった！」", otherLabel: "「助かった！」が付きました", badge: "助かった！" },
       thanks_answer: { icon: "favorite",         mineLabel: "あなたの回答に「助かった！」", otherLabel: "「助かった！」が付きました", badge: "助かった！" },
       best:          { icon: "workspace_premium", mineLabel: "あなたの回答がベストアンサーに選ばれました", otherLabel: "ベストアンサーが決まりました", badge: "ベストアンサー" },
-      ai:            { icon: "auto_awesome",     mineLabel: "AIからひとこと", otherLabel: "AIからひとこと", badge: "AIから" }
+      ai:            { icon: "auto_awesome",     mineLabel: "AIからひとこと", otherLabel: "AIからひとこと", badge: "AIから" },
+      digest:        { icon: "school",           mineLabel: "学部の新着まとめ", otherLabel: "学部の新着まとめ", badge: "学部の新着" }
     };
-    const noticeLabel = (n) => { const k = NOTICE_KINDS[n.kind] || NOTICE_KINDS.answer; return n.mine ? k.mineLabel : k.otherLabel; };
+    const noticeLabel = (n) => {
+      if (n.kind === "digest") return `${n.faculty}の新着まとめ（${n.count}件）`;
+      const k = NOTICE_KINDS[n.kind] || NOTICE_KINDS.answer; return n.mine ? k.mineLabel : k.otherLabel;
+    };
 
     // 「あなたの〜」の目印
     function MineBadge({ type, className }) {
@@ -1591,6 +1606,9 @@
                 <Icon n="favorite" fill={post.isLiked} size={16} className={post.isLiked ? "text-love" : ""} />{post.thanks}
               </button>
             </div>
+            {facultyOf(post) !== "all" && (
+              <span className="flex items-center gap-0.5 text-[11px] font-bold text-sub"><Icon n="school" size={14} className="text-brand-deep" />{facultyOf(post)}向け</span>
+            )}
             {isQ && (post.bestAnswerId ? <SolvedBadge /> : (
               <span className={cx("inline-flex items-center gap-1 text-[11px] font-bold", post.commentsCount ? "text-sub" : "text-brand-deep")}>
                 <Icon n="forum" size={14} />{post.commentsCount ? `回答 ${post.commentsCount}` : "回答募集中"}
@@ -1691,7 +1709,8 @@
       { key: "thanks", label: "「助かった！」が付いたとき", sub: "自分の記事・回答" },
       { key: "comment", label: "自分の記事へのコメント" },
       { key: "watch", label: "「気になる」した質問の更新" },
-      { key: "ai", label: "AIからのひとこと" }
+      { key: "ai", label: "AIからのひとこと" },
+      { key: "faculty", label: "自分の学部の新着まとめ", sub: `1日1回・${DIGEST_HOUR}時ごろにまとめて届きます` }
     ];
     const DOC_PAGES = {
       guide: { title: "ガイドライン", body: [
@@ -2054,14 +2073,13 @@
     // ============================================================
     const PREMIUM_FEATURES = [
       { group: "学び", items: [
-        { id: "kakomon", icon: "auto_stories", title: "過去問・解説ノート 見放題", desc: "全授業の過去問と、先輩の解説ノートを閲覧・保存" },
+        { id: "kakomon", icon: "auto_stories", title: "投稿された過去問・ノートが見放題", desc: "みんなが投稿した過去問・ノートを回数を気にせず見られる（フリーは月に数件まで）" },
         { id: "ai_search", icon: "bolt", title: "AI要約検索 使い放題", desc: "質問すると、関連する投稿をAIが要約して即回答" },
-        { id: "test_pack", icon: "inventory_2", title: "授業別テスト対策まとめ", desc: "出題傾向・過去問・ノートを授業ごとに1ページに" },
+        { id: "test_pack", icon: "inventory_2", title: "授業別テスト対策まとめ", desc: "投稿された過去問・ノート・質問を、授業ごとに1ページに整理" },
         { id: "risyu", icon: "calendar_month", title: "履修プランナー", desc: "時間割と卒業に必要な単位を自動でチェック" },
-        { id: "report_ai", icon: "rate_review", title: "レポート・ESのAI添削", desc: "構成や言い回しをAIがアドバイス" }
+        { id: "report_ai", icon: "rate_review", title: "レポートのAI添削", desc: "レポートの構成や言い回しをAIがアドバイス" }
       ] },
       { group: "情報・つながり", items: [
-        { id: "kyuko_push", icon: "notifications_active", title: "休講・補講の即時通知", desc: "登録した授業の休講情報をすぐにお知らせ" },
         { id: "priority_q", icon: "trending_up", title: "質問の優先表示", desc: "自分の質問を上位に出して、回答を集めやすく" },
         { id: "shimei", icon: "person_search", title: "学部・学年を指定して質問", desc: "聞きたい人にピンポイントで質問できる" }
       ] },
@@ -2069,11 +2087,6 @@
         { id: "ticket_plus", icon: "confirmation_number", title: "限定チケット・割引アップ", desc: "協力店のプレミアム限定チケットが使える" },
         { id: "bonus_pt", icon: "redeem", title: "毎月ボーナスポイント", desc: "毎月ポイントをプレゼント" },
         { id: "pt_double", icon: "stars", title: "ポイント2倍", desc: "記事・回答でもらえるポイントが2倍" }
-      ] },
-      { group: "進路・キャリア", items: [
-        { id: "zemi", icon: "groups", title: "ゼミ・研究室の口コミ詳細", desc: "指導スタイル・忙しさ・卒業後の進路まで" },
-        { id: "job_early", icon: "work", title: "バイト・インターン先行公開", desc: "学生向けの募集を、一般公開より先にチェック" },
-        { id: "shukatsu", icon: "badge", title: "就活体験記 見放題", desc: "先輩のES・面接・内定までの体験記" }
       ] },
       { group: "快適・自分らしさ", items: [
         { id: "no_ads", icon: "block", title: "広告なし", desc: "広告を表示せず、すっきり使える" },
@@ -2538,6 +2551,7 @@
       const [newAnonymous, setNewAnonymous] = usePersistentState("newAnonymous", () => false);
       const [answerAnonymous, setAnswerAnonymous] = usePersistentState("answerAnonymous", () => false);
       const [onlyQuestions, setOnlyQuestions] = useState(false);
+      const [onlyMyFaculty, setOnlyMyFaculty] = useState(false);
       const [reportTarget, setReportTarget] = useState(null); // { postId, commentId }
       const [reportReason, setReportReason] = useState("");
       const [reportedIds, setReportedIds] = usePersistentState("reportedIds", () => []);
@@ -2603,6 +2617,7 @@
       const [isOcrProcessing, setIsOcrProcessing] = useState(false);
       const [ocrTags, setOcrTags] = useState([]);
       const [newTags, setNewTags] = useState([]);
+      const [newTargetFaculty, setNewTargetFaculty] = useState("all");
 
       const [floatingHearts, setFloatingHearts] = useState([]);
       const [toastMessage, setToastMessage] = useState(null);
@@ -2631,6 +2646,45 @@
         setPosts(prev => prev.map(p => p.id === postId ? { ...p, commentsCount: p.commentsCount + 1, comments: [...p.comments, demoComment] } : p));
         pushNotice(cur, "answer", text);
       };
+      // 🎓 学部の新着まとめ：前回のまとめ以降に増えた「自分の学部向け」の投稿を、1日1回お知らせにまとめる
+      //   ・本番：毎日 DIGEST_HOUR 時にサーバーから配信
+      //   ・デモ：アプリを開いたとき、その日のまとめがまだなら作る（お知らせ画面のボタンで今すぐ届けることも可能）
+      const [digestState, setDigestState] = usePersistentState("facultyDigest", () => ({ lastDay: "", ids: [] }));
+      const digestRef = useRef(digestState);
+      digestRef.current = digestState;
+      const sendFacultyDigest = (force, extraPosts) => {
+        const today = new Date().toDateString();
+        const d = digestRef.current;
+        if (!force && d.lastDay === today) return;
+        if (notifPrefsRef.current && notifPrefsRef.current.faculty === false) { if (force) showToast("通知設定で「自分の学部の新着まとめ」がオフになっています"); return; }
+        const pool = [...(extraPosts || []), ...postsRef.current];
+        const fresh = pool.filter((p, i) => pool.findIndex(q => q.id === p.id) === i)
+          .filter(p => facultyOf(p) === U.faculty && !isMineName(p.author) && !d.ids.includes(p.id));
+        const next = { lastDay: today, ids: [...d.ids, ...fresh.map(p => p.id)] };
+        digestRef.current = next;
+        setDigestState(next);
+        if (!fresh.length) { if (force) showToast(`${U.faculty}の新着はありません`); return; }
+        const n = { id: `digest-${Date.now()}`, postId: null, kind: "digest", mine: true, faculty: U.faculty, count: fresh.length,
+          title: "", preview: fresh.slice(0, 3).map(p => `・${plainTitle(p.title)}`).join("\n") + (fresh.length > 3 ? `\nほか${fresh.length - 3}件` : ""), at: Date.now(), read: false };
+        setNotices(prev => [n, ...prev].slice(0, 30));
+        showToast(`🔔 ${U.faculty}の新着まとめが届きました（${fresh.length}件）`);
+      };
+      useEffect(() => {
+        if (!verified) return;
+        const t = setTimeout(() => sendFacultyDigest(false), 2500);
+        return () => clearTimeout(t);
+      }, [verified]);
+      // デモ：同じ学部の学生が投稿したことにして、今日のまとめをすぐ届ける
+      const demoFacultyDigest = () => {
+        const p = {
+          id: Date.now(), createdAt: Date.now(), type: "info", author: `${U.facultyShort}2年`, grade: "2年", category: "授業・過去問",
+          title: "【ミクロ経済学】来週の小テストの範囲が変わっていました", content: "講義の最後に、範囲が第5章までに変更とアナウンスがありました。出席していなかった人向けに共有します。",
+          thanks: 0, views: 1, commentsCount: 0, time: "たった今", isLiked: false, image: null, tags: ["小テスト", "ミクロ経済"], targetFaculty: U.faculty, comments: []
+        };
+        setPosts(prev => [p, ...prev]);
+        sendFacultyDigest(true, [p]);
+      };
+
       const markAllNoticesRead = () => setNotices(prev => prev.map(n => ({ ...n, read: true })));
 
       // デモ用：別の学生が反応したことにする（本番はサーバーからのお知らせ）
@@ -2677,7 +2731,7 @@
         showToast("🏅 ベストアンサーを決定しました。質問は解決済みになりました");
       };
 
-      const isSearching = searchQuery.trim() !== "" || selectedTag !== "" || onlyQuestions;
+      const isSearching = searchQuery.trim() !== "" || selectedTag !== "" || onlyQuestions || onlyMyFaculty;
 
       const handleImageSelect = (e) => {
         const file = e.target.files && e.target.files[0];
@@ -2822,11 +2876,13 @@
       const isMine = (name) => typeof name === "string" && name.includes("あなた");
 
       const openPost = () => {
+        setNewTargetFaculty(FACULTY_DEFAULT_CATEGORIES.includes(newCategory) ? U.faculty : "all");
         setNewType("info");
         setOpenNewPostModal(true);
       };
 
       const openAsk = (prefillTitle) => {
+        setNewTargetFaculty(FACULTY_DEFAULT_CATEGORIES.includes(newCategory) ? U.faculty : "all");
         setNewType("question");
         if (prefillTitle) setNewTitle(prefillTitle);
         setOpenNewPostModal(true);
@@ -2973,6 +3029,7 @@
           isLiked: false,
           image: newImage,
           tags: Array.from(new Set([...newTags, ...hashtagsInText(`${postTitle} ${postContent}`)])).slice(0, 5),
+          targetFaculty: newTargetFaculty,
           comments: []
         };
 
@@ -3031,7 +3088,7 @@
           const matchesQuery = searchTokens.every(t => expandToken(t).some(w => hay.includes(w)));
 
           const matchesTag = selectedTag === "" || post.category === selectedTag;
-          const matchesType = (!onlyQuestions || post.type === "question") && (!onlyInfo || post.type !== "question");
+          const matchesType = (!onlyQuestions || post.type === "question") && (!onlyInfo || post.type !== "question") && (!onlyMyFaculty || facultyOf(post) === U.faculty);
           const matchesAnswer = answerFilter === "all"
             || (answerFilter === "none" && post.type === "question" && post.commentsCount === 0)
             || (answerFilter === "has" && post.commentsCount > 0);
@@ -3053,7 +3110,7 @@
           indexed.sort((x, y) => score(y.p) - score(x.p) || x.i - y.i);
         }
         return indexed.map(x => x.p);
-      }, [posts, searchTokens, selectedTag, onlyQuestions, onlyInfo, answerFilter, fImage, fPopular, fRecent, sortKey, reportedIds]);
+      }, [posts, searchTokens, selectedTag, onlyQuestions, onlyMyFaculty, onlyInfo, answerFilter, fImage, fPopular, fRecent, sortKey, reportedIds]);
 
       // 関連キーワード（結果に多く出てくるハッシュタグ＋言い換え）
       const relatedKeywords = useMemo(() => {
@@ -3105,6 +3162,7 @@
       };
       const activeFilterList = [
         onlyQuestions && { key: "q", label: "質問", clear: () => setOnlyQuestions(false) },
+        onlyMyFaculty && { key: "fac", label: `${U.faculty}向け`, clear: () => setOnlyMyFaculty(false) },
         onlyInfo && { key: "i", label: "記事", clear: () => setOnlyInfo(false) },
         answerFilter === "none" && { key: "n", label: "回答なし", clear: () => setAnswerFilter("all") },
         answerFilter === "has" && { key: "h", label: "回答あり", clear: () => setAnswerFilter("all") },
@@ -3328,7 +3386,7 @@
                           <span>検索結果 ({filteredPosts.length}件)</span>
                         </span>
                         <button
-                          onClick={() => { setSearchQuery(""); setSelectedTag(""); setOnlyQuestions(false); resetResultFilters(); }}
+                          onClick={() => { setSearchQuery(""); setSelectedTag(""); setOnlyQuestions(false); setOnlyMyFaculty(false); resetResultFilters(); }}
                           className="text-sub text-[12px] underline"
                         >
                           検索をクリア
@@ -3923,6 +3981,7 @@
                     <div className="text-[13px] font-bold truncate">{selectedPost.author}</div>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       {isMine(selectedPost.author) && <MineBadge type={selectedPost.type} />}
+                      {facultyOf(selectedPost) !== "all" && <span className="inline-flex items-center gap-0.5 border border-line text-sub text-[11px] font-bold px-2 py-[1px] rounded-full"><Icon n="school" size={13} />{facultyOf(selectedPost)}向け</span>}
                       {isQuestion && (selectedPost.bestAnswerId ? <SolvedBadge /> : <QuestionBadge />)}
                       <CategoryChip>{selectedPost.category}</CategoryChip>
                     </div>
@@ -4205,11 +4264,29 @@
 
                 <div>
                   <label className={LABEL}>カテゴリー</label>
-                  <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className={cx(INPUT, "font-bold")}>
+                  <select value={newCategory} onChange={(e) => { setNewCategory(e.target.value); setNewTargetFaculty(FACULTY_DEFAULT_CATEGORIES.includes(e.target.value) ? U.faculty : "all"); }} className={cx(INPUT, "font-bold")}>
                     {CATEGORIES.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className={LABEL} htmlFor="target-faculty">どの学部向け？</label>
+                  <div className="flex gap-2">
+                    {["all", U.faculty].map(v => (
+                      <button key={v} type="button" onClick={() => setNewTargetFaculty(v)} aria-pressed={newTargetFaculty === v}
+                        className={cx("flex-1 py-2.5 rounded-2xl text-[13px] font-bold border-2 press", newTargetFaculty === v ? "border-brand bg-brand-tint text-brand-deep" : "border-line text-sub bg-surface")}>
+                        {v === "all" ? "全学部向け" : `${v}向け`}
+                      </button>
+                    ))}
+                    <select id="target-faculty" value={newTargetFaculty !== "all" && newTargetFaculty !== U.faculty ? newTargetFaculty : ""} onChange={(e) => e.target.value && setNewTargetFaculty(e.target.value)}
+                      className={cx("flex-1 min-w-0 rounded-2xl text-[13px] font-bold border-2 px-2 bg-surface", newTargetFaculty !== "all" && newTargetFaculty !== U.faculty ? "border-brand text-brand-deep" : "border-line text-sub")}>
+                      <option value="">ほかの学部</option>
+                      {(U.faculties || []).filter(f => f !== U.faculty).map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <p className="text-[11.5px] text-mute mt-1">{newTargetFaculty === "all" ? "全学部の人のフィードに表示されます" : `${newTargetFaculty}の人に、1日1回の「新着まとめ」で届きます`}</p>
                 </div>
 
                 <div>
@@ -4630,12 +4707,18 @@
                   <div className="text-center py-8 space-y-2">
                     <div className="w-14 h-14 rounded-3xl bg-sunk text-mute mx-auto flex items-center justify-center"><Icon n="notifications_none" size={30} /></div>
                     <p className="font-head font-black text-[15px]">まだお知らせはありません</p>
-                    <p className="text-[12px] text-sub">自分の質問・回答・投稿への反応と、「気になる」した質問の回答が届きます</p>
+                    <p className="text-[12px] text-sub">自分の質問・回答・投稿への反応、「気になる」した質問の回答、学部の新着まとめが届きます</p>
                   </div>
                 ) : notices.map(n => (
                   <button
                     key={n.id}
-                    onClick={() => { setOpenNotices(false); setSelectedPostId(n.postId); }}
+                    onClick={() => {
+                      setOpenNotices(false);
+                      if (n.kind === "digest") {
+                        setNotices(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
+                        setCurrentTab(0); setSearchQuery(""); setSelectedTag(""); setOnlyQuestions(false); setOnlyMyFaculty(true); window.scrollTo(0, 0);
+                      } else setSelectedPostId(n.postId);
+                    }}
                     className={cx("w-full text-left rounded-2xl p-3.5 flex gap-3 items-start press", n.read ? "bg-sunk" : "bg-brand-tint")}
                   >
                     <span className={cx("w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0", n.kind === "ai" ? "bg-sky-tint text-sky-ink" : n.kind.startsWith("thanks") ? "bg-surface text-love" : "bg-surface text-brand-deep")}>
@@ -4643,14 +4726,17 @@
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[13px] font-black leading-snug">{noticeLabel(n)}</span>
-                      <span className="block text-[12px] text-sub mt-0.5 truncate">「{n.title}」</span>
-                      {n.preview && <span className="block text-[12px] text-ink mt-1 line-clamp-2 leading-relaxed">{n.preview}</span>}
+                      {n.title && <span className="block text-[12px] text-sub mt-0.5 truncate">「{n.title}」</span>}
+                      {n.preview && <span className={cx("block text-[12px] text-ink mt-1 leading-relaxed", n.kind === "digest" ? "whitespace-pre-line" : "line-clamp-2")}>{n.preview}</span>}
                       <span className="block text-[12px] text-mute mt-1">{agoLabel(n.at)}</span>
                     </span>
                     {!n.read && <span className="w-2.5 h-2.5 rounded-full bg-brand flex-shrink-0 mt-1.5" aria-label="未読"></span>}
                   </button>
                 ))}
                 <p className="text-[12px] text-mute pt-1">※ デモ：投稿・回答・「気になる」の数秒後に、ほかの学生の反応が届いたことにしています</p>
+                <button onClick={demoFacultyDigest} className="w-full text-[12px] font-bold text-brand-deep border border-dashed border-brand/50 rounded-2xl py-2.5 press">
+                  デモ：{U.faculty}の新着を追加して、まとめを今すぐ届ける
+                </button>
               </div>
             </Sheet>
           )}
