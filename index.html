@@ -162,6 +162,8 @@
     }
     .scrollbar-none::-webkit-scrollbar { display: none; }
     .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+    /* シート・ダイアログの中のスクロールは、端まで来ても背面に伝えない */
+    .fixed .overflow-y-auto { overscroll-behavior: contain; }
 
     /* アイコン（Material Symbols Rounded） */
     .ms {
@@ -898,7 +900,34 @@
     }
 
     // お店で使う（全画面）：QR読み取り → スライドで確定 → 完了画面を見せる
+    // 🔒 ボトムシート・ダイアログ表示中は、背面のページをスクロールさせない
+    //   ・開いている数を数えて、すべて閉じたときだけ元に戻す（シートの上にシートが重なっても大丈夫）
+    //   ・スクロールバーが消えてもレイアウトがずれないよう、その幅だけ右に余白を足す
+    let _scrollLocks = 0;
+    function useScrollLock() {
+      useEffect(() => {
+        const html = document.documentElement, body = document.body;
+        if (_scrollLocks++ === 0) {
+          const bar = window.innerWidth - html.clientWidth;
+          html.style.overflow = "hidden";
+          body.style.overflow = "hidden";
+          html.style.overscrollBehavior = "none";
+          if (bar > 0) body.style.paddingRight = `${bar}px`;
+        }
+        return () => {
+          if (--_scrollLocks === 0) {
+            html.style.overflow = "";
+            body.style.overflow = "";
+            html.style.overscrollBehavior = "";
+            body.style.paddingRight = "";
+          }
+        };
+      }, []);
+    }
+    function ScrollLock() { useScrollLock(); return null; }
+
     function StoreRedeemScreen({ coupon, onClose, onRedeem }) {
+      useScrollLock();
       const now = useNow(1000);
       const [step, setStep] = useState(coupon.isUsed ? "done" : "scan");   // scan → confirm → done
       const bodyRef = useRef(null);
@@ -1180,6 +1209,7 @@
 
     // ボトムシート（外側タップで閉じる）
     function Sheet({ onClose, z = 50, children, tone }) {
+      useScrollLock();
       // 上のつまみ（バー）を下に引くと閉じる。一定以上引くか、勢いよく離すと閉じ、足りなければ元の位置に戻る
       const [dy, setDy] = useState(0);
       const [dragging, setDragging] = useState(false);
@@ -1206,7 +1236,7 @@
         if (dy > 110 || (fast && dy > 30)) onClose(); else setDy(0);
       };
       return (
-        <div className={cx("fixed inset-0 flex items-end justify-center animate-fade-in")} style={{ zIndex: z, background: `rgb(10 20 18 / ${Math.max(0.12, 0.5 - dy / 700)})` }} onClick={onClose}>
+        <div className={cx("fixed inset-0 flex items-end justify-center animate-fade-in")} style={{ zIndex: z, background: `rgb(10 20 18 / ${Math.max(0.12, 0.5 - dy / 700)})`, touchAction: "none" }} onClick={onClose}>
           <div
             className={cx("bg-surface text-ink w-full max-w-md rounded-t-[2rem] max-h-[90vh] flex flex-col overflow-hidden animate-slide-up shadow-lift", tone)}
             style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: dragging ? "none" : "transform .25s cubic-bezier(.22,1,.36,1)" }}
@@ -1589,8 +1619,9 @@
 
     // 中央に出るダイアログ（外側タップで閉じる）
     function Dialog({ onClose, children, className, z = 50 }) {
+      useScrollLock();
       return (
-        <div className="fixed inset-0 flex items-center justify-center p-4 animate-fade-in" style={{ zIndex: z, background: "rgb(10 20 18 / .55)" }} onClick={onClose}>
+        <div className="fixed inset-0 flex items-center justify-center p-4 animate-fade-in" style={{ zIndex: z, background: "rgb(10 20 18 / .55)", touchAction: "none" }} onClick={onClose}>
           <div
             className={cx("bg-surface text-ink w-full max-w-sm rounded-[2rem] shadow-lift max-h-[88vh] overflow-y-auto animate-slide-up", className)}
             onClick={(e) => e.stopPropagation()}
@@ -3449,7 +3480,8 @@ ${logsText}
 
           {/* 🌟 SNSシェア対応ハイライトモーダル */}
           {openReportModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in" style={{ background: "rgb(10 20 18 / .6)" }} onClick={() => setOpenReportModal(false)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in" style={{ background: "rgb(10 20 18 / .6)", touchAction: "none" }} onClick={() => setOpenReportModal(false)}>
+              <ScrollLock />
               <div className="w-full max-w-sm space-y-3 animate-slide-up" onClick={(e) => e.stopPropagation()}>
                 <div className="flex justify-end">
                   <button onClick={() => setOpenReportModal(false)} aria-label="閉じる" className="w-9 h-9 rounded-full bg-surface/90 text-ink flex items-center justify-center press shadow-soft">
