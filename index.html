@@ -298,8 +298,8 @@
     document.title = `キャンパスリアルポータル｜${U.name}`;
 
     // ============================================================
-    // 💾 保存（この端末のブラウザに保存。リロードしても質問・回答・ポイントが残ります）
-    //   ※ 保存先は端末ごとです。他の学生の端末とは共有されません（共有にはサーバーが必要）
+    // 💾 保存しない（プロトタイプのため、端末には何も残しません）
+    //   ・投稿・回答・ポイントなどは画面を開いている間だけ使い、閉じる／再読み込みで初期状態に戻ります
     // ============================================================
     const STORAGE_PREFIX = `tunagari-proto-261015ai:${UNIV_ID}:`;
 
@@ -308,18 +308,9 @@
     //   ・URL末尾に ?test=1 を付けて開くと「テスト」として記録されます（チーム内の確認用）
     const VOTE_ENDPOINT = "https://script.google.com/macros/s/AKfycbx3CHzzRPSaUZ3L9G2I1rt4tTx9MjZhp6bnhPsR3MwRWDS57kNCKXLIQVEfF5mQITXq4w/exec";
 
+    // 端末には保存せず、メモリ上だけで持つ（名前は以前のまま）
     function usePersistentState(key, initialFactory) {
-      const [value, setValue] = useState(() => {
-        try {
-          const raw = window.localStorage.getItem(STORAGE_PREFIX + key);
-          if (raw !== null) return JSON.parse(raw);
-        } catch (e) { /* 保存できない環境では初期値で動く */ }
-        return initialFactory();
-      });
-      useEffect(() => {
-        try { window.localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value)); } catch (e) { /* 容量超過など */ }
-      }, [key, value]);
-      return [value, setValue];
+      return useState(initialFactory);
     }
 
     function clearAllPersisted() {
@@ -329,6 +320,8 @@
           .forEach(k => window.localStorage.removeItem(k));
       } catch (e) {}
     }
+    // 以前の版でこの端末に残ったデータがあれば、開いた時点で消す
+    clearAllPersisted();
 
     // 画像は縮小して保存（localStorageの容量を守るため）
     function readAndDownscale(file, maxSide, done) {
@@ -2092,6 +2085,17 @@
     const PREMIUM_PRICES = ["払わない", "300円", "500円", "800円", "1,000円以上"];
     const ALL_PREMIUM = PREMIUM_FEATURES.flatMap(g => g.items);
     const _isTestVote = new URLSearchParams(window.location.search).has("test");
+    // 回答の削除依頼の連絡先（必要に応じて書き換えてください）
+    const VOTE_CONTACT = "TUNAGARI運営チーム";
+    // 回答画面に出す「送信内容・目的・削除のお願い先」
+    function VoteNotice({ clientId }) {
+      return (
+        <p className="text-[11.5px] text-mute leading-relaxed flex gap-1.5 px-1">
+          <Icon n="lock" size={15} className="flex-shrink-0 mt-px" />
+          <span>送るのは回答内容だけ（名前・メールは送りません）。サービス検討のためだけに使います。削除の希望は回答ID「{String(clientId || "").slice(-6)}」を添えて{VOTE_CONTACT}まで。</span>
+        </p>
+      );
+    }
 
     function PremiumVote({ vote, setVote, clientId, profile, showToast, onBack }) {
       const [sel, setSel] = useState(() => vote ? vote.features : []);
@@ -2140,6 +2144,7 @@
                 <div className="flex flex-wrap gap-1.5">{vote.features.map(id => { const f = ALL_PREMIUM.find(x => x.id === id); return f ? <span key={id} className="bg-brand-tint text-brand-deep text-[12px] font-bold px-2.5 py-1 rounded-full">{f.title}</span> : null; })}</div>
                 <button onClick={() => setEditing(true)} className="text-[12.5px] font-bold text-brand-deep press">回答を修正する</button>
               </div>
+              <VoteNotice clientId={clientId} />
               {total ? (
                 <div className="bg-surface rounded-3xl border border-line/70 shadow-soft p-4 space-y-3">
                   <p className="font-head font-black text-[16px]">みんなの回答（{total}人）</p>
@@ -2191,7 +2196,8 @@
               </section>
 
               {/* 送信ボタン：入力欄に重ならないよう、フォームの最後に置く（下のメニューぶんの余白はページ側で確保） */}
-              <div className="pt-2 pb-6">
+              <div className="pt-2 pb-6 space-y-3">
+                <VoteNotice clientId={clientId} />
                 <button onClick={submit} disabled={!sel.length || sending} className={cx(BTN_PRIMARY, "w-full py-4 text-[15px]")}>
                   {sending ? "送信中…" : sel.length ? `${sel.length}件を選んで送信する` : "ほしい機能を選んでください"}
                 </button>
@@ -2549,7 +2555,8 @@
       const [reportTarget, setReportTarget] = useState(null); // { postId, commentId }
       const [reportReason, setReportReason] = useState("");
       const [reportedIds, setReportedIds] = usePersistentState("reportedIds", () => []);
-      const [verified, setVerified] = usePersistentState("verified", () => false);
+      // 体験しやすいよう、メール入力（ログイン画面）を省いて最初からホームを表示。ログアウトするとログイン画面が出ます
+      const [verified, setVerified] = usePersistentState("verified", () => true);
 
       // 📜 画面を切り替えたら、スクロール位置を先頭に戻す
       useEffect(() => { window.scrollTo(0, 0); }, [currentTab, verified]);
@@ -3704,26 +3711,6 @@
                     <span>表示名は「{myLabel.replace("（あなた）", "")}」（匿名も可）</span>
                   </div>
 
-                  <div>
-                    <span className={LABEL}>画面の色</span>
-                    <Segmented
-                      value={theme}
-                      onChange={setTheme}
-                      options={[
-                        { value: "auto", label: "自動", icon: "brightness_auto" },
-                        { value: "light", label: "ライト", icon: "light_mode" },
-                        { value: "dark", label: "ダーク", icon: "dark_mode" }
-                      ]}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-line/70">
-                    <span className="text-[12px] text-mute leading-snug">デモ：データはこの端末に保存</span>
-                    <button onClick={handleResetDemo} className="flex-shrink-0 bg-sunk text-sub text-[12px] font-bold px-3 py-2 rounded-xl flex items-center gap-1 press">
-                      <Icon n="restart_alt" size={16} />
-                      リセット
-                    </button>
-                  </div>
                 </div>
 
                 <div ref={subTabRef}></div>
