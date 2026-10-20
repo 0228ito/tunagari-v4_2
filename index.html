@@ -2092,7 +2092,7 @@
       return (
         <p className="text-[11.5px] text-mute leading-relaxed flex gap-1.5 px-1">
           <Icon n="lock" size={15} className="flex-shrink-0 mt-px" />
-          <span>送るのは回答内容だけ（名前・メールは送りません）。サービス検討のためだけに使います。削除の希望は回答ID「{String(clientId || "").slice(-6)}」を添えて{VOTE_CONTACT}まで。</span>
+          <span>送るのは大学・学部・学年と回答内容だけ（名前・メールは送りません）。サービス検討のためだけに使います。削除の希望は回答ID「{String(clientId || "").slice(-6)}」を添えて{VOTE_CONTACT}まで。</span>
         </p>
       );
     }
@@ -3704,14 +3704,6 @@
                         </div>
                       </div>
 
-
-                <div className="bg-surface rounded-3xl p-4 space-y-3.5 shadow-soft border border-line/70 w-full">
-                  <div className="flex items-center gap-2 text-[13px] text-sub">
-                    <Icon n="visibility_off" size={18} className="text-brand-deep" />
-                    <span>表示名は「{myLabel.replace("（あなた）", "")}」（匿名も可）</span>
-                  </div>
-
-                </div>
 
                 <div ref={subTabRef}></div>
                 <Segmented
